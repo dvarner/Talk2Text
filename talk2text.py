@@ -32,7 +32,19 @@ DEFAULT_CONFIG: dict = {
     "beam_size":                 5,
     "temperature":               0.0,
     "condition_on_previous_text": False,
+    "hotkey_enabled":            True,
+    "hotkey":                    "<ctrl>+<shift>+space",
 }
+
+
+def _format_hotkey(hotkey: str) -> str:
+    """'<ctrl>+<shift>+space' → 'Ctrl+Shift+Space' for display."""
+    parts = hotkey.split("+")
+    out = []
+    for p in parts:
+        p = p.strip()
+        out.append(p[1:-1].capitalize() if p.startswith("<") and p.endswith(">") else p.capitalize())
+    return "+".join(out)
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -94,6 +106,36 @@ class ModelManager:
                 on_done(False, str(e))
 
         threading.Thread(target=_thread, daemon=True).start()
+
+
+# ── Hotkey Listener ───────────────────────────────────────────────────────────
+
+class HotkeyListener:
+    """Global hotkey listener using pynput. Runs in its own daemon thread."""
+
+    def __init__(self):
+        self._listener = None
+
+    def start(self, hotkey: str, callback: Callable) -> bool:
+        self.stop()
+        try:
+            from pynput import keyboard
+            self._listener = keyboard.GlobalHotKeys({hotkey: callback})
+            self._listener.start()
+            print(f"[Hotkey] Listening for {hotkey}")
+            return True
+        except Exception as e:
+            print(f"[Hotkey] Failed to start: {e}")
+            self._listener = None
+            return False
+
+    def stop(self) -> None:
+        if self._listener:
+            try:
+                self._listener.stop()
+            except Exception:
+                pass
+            self._listener = None
 
 
 # ── Audio Recorder ─────────────────────────────────────────────────────────────
@@ -250,7 +292,7 @@ class SettingsWindow(ctk.CTkToplevel):
     def __init__(self, parent, config: dict, on_apply: Callable[[dict], None]):
         super().__init__(parent)
         self.title("Settings")
-        self.geometry("460x640")
+        self.geometry("460x720")
         self.resizable(False, False)
         self.transient(parent)
 
@@ -268,7 +310,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.update_idletasks()
         px = self.master.winfo_x() + self.master.winfo_width() // 2
         py = self.master.winfo_y() + self.master.winfo_height() // 2
-        self.geometry(f"460x600+{px - 230}+{py - 300}")
+        self.geometry(f"460x720+{px - 230}+{py - 360}")
 
     # ── UI ─────────────────────────────────────────────────────────────────────
 
@@ -319,6 +361,41 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self._dl_label.grid(row=r, column=0, padx=20, pady=(0, 8), sticky="w"); r += 1
         self._dl_label.grid_remove()
+
+        # Divider
+        ctk.CTkFrame(self, height=1, fg_color="gray30").grid(
+            row=r, column=0, padx=20, pady=(0, 12), sticky="ew"
+        ); r += 1
+
+        # ── Hotkey section ─────────────────────────────────────────────────────
+        ctk.CTkLabel(
+            self, text="Dictate Hotkey", font=ctk.CTkFont(size=14, weight="bold")
+        ).grid(row=r, column=0, padx=20, pady=(0, 6), sticky="w"); r += 1
+
+        hk_row = ctk.CTkFrame(self, fg_color="transparent")
+        hk_row.grid(row=r, column=0, padx=20, pady=(0, 4), sticky="ew"); r += 1
+        hk_row.grid_columnconfigure(1, weight=1)
+
+        self._hotkey_enabled_var = ctk.BooleanVar(
+            value=bool(self._config.get("hotkey_enabled", True))
+        )
+        ctk.CTkSwitch(
+            hk_row, text="Enable", variable=self._hotkey_enabled_var,
+            onvalue=True, offvalue=False,
+        ).grid(row=0, column=0, padx=(0, 12), sticky="w")
+
+        self._hotkey_var = ctk.StringVar(
+            value=self._config.get("hotkey", DEFAULT_CONFIG["hotkey"])
+        )
+        ctk.CTkEntry(hk_row, textvariable=self._hotkey_var).grid(
+            row=0, column=1, sticky="ew"
+        )
+
+        ctk.CTkLabel(
+            self,
+            text="Use pynput format, e.g.  <ctrl>+<shift>+space  or  <alt>+r",
+            font=ctk.CTkFont(size=10), text_color="gray",
+        ).grid(row=r, column=0, padx=20, pady=(0, 10), sticky="w"); r += 1
 
         # Divider
         ctk.CTkFrame(self, height=1, fg_color="gray30").grid(
@@ -442,12 +519,18 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _reset_defaults(self):
         self._model_seg.set(DEFAULT_CONFIG["model_size"])
+        self._hotkey_enabled_var.set(DEFAULT_CONFIG["hotkey_enabled"])
+        self._hotkey_var.set(DEFAULT_CONFIG["hotkey"])
         for key, (kind, var) in self._adv_widgets.items():
             var.set(DEFAULT_CONFIG[key])
         self._refresh_model_status()
 
     def _apply(self):
-        new_config = {"model_size": self._model_seg.get()}
+        new_config = {
+            "model_size":     self._model_seg.get(),
+            "hotkey_enabled": bool(self._hotkey_enabled_var.get()),
+            "hotkey":         self._hotkey_var.get().strip() or DEFAULT_CONFIG["hotkey"],
+        }
         for key, (kind, var) in self._adv_widgets.items():
             if kind == "entry":
                 raw = var.get().strip()
@@ -485,12 +568,15 @@ class Talk2TextApp(ctk.CTk):
         self._config = load_config()
         self.recorder = AudioRecorder()
         self.transcriber = Transcriber()
+        self.hotkey_listener = HotkeyListener()
+        self._dictate_target_hwnd: Optional[int] = None
         self._timer_job = None
         self._last_save_path: Optional[str] = None
         self._settings_win: Optional[SettingsWindow] = None
 
         self._build_ui()
         self._load_model(self._config["model_size"])
+        self._apply_hotkey(self._config)
 
     # ── UI Construction ────────────────────────────────────────────────────────
 
@@ -574,6 +660,60 @@ class Talk2TextApp(ctk.CTk):
         )
         self.save_path_label.grid(row=4, column=0, padx=20, pady=(0, 12))
 
+    # ── Hotkey ────────────────────────────────────────────────────────────────
+
+    def _idle_status(self) -> str:
+        size = self._config["model_size"]
+        if self._config.get("hotkey_enabled") and self._config.get("hotkey"):
+            hk = _format_hotkey(self._config["hotkey"])
+            return f"Ready ({size}) · {hk} to dictate"
+        return f"Ready ({size}) — press Record to start"
+
+    def _apply_hotkey(self, config: dict) -> None:
+        if config.get("hotkey_enabled") and config.get("hotkey"):
+            def _on_hotkey():
+                # Capture active window NOW, in the hotkey thread, before anything changes
+                import ctypes
+                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                self.after(0, lambda: self._toggle_record_via_hotkey(hwnd))
+            self.hotkey_listener.start(config["hotkey"], _on_hotkey)
+        else:
+            self.hotkey_listener.stop()
+
+    def _toggle_record_via_hotkey(self, hwnd: int) -> None:
+        if not self.recorder.recording:
+            self._dictate_target_hwnd = hwnd or None
+            self._start_record()
+        else:
+            self._stop_record()
+
+    def _paste_to_dictate_target(self) -> None:
+        hwnd = self._dictate_target_hwnd
+        self._dictate_target_hwnd = None
+        if not hwnd:
+            return
+
+        def _do_paste():
+            import ctypes
+            import time
+            user32 = ctypes.windll.user32
+            if not user32.IsWindow(hwnd):
+                print("[Paste] Target window no longer exists")
+                return
+            # Restore and bring target window to front
+            user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+            time.sleep(0.15)             # let focus settle
+            # Simulate Ctrl+V
+            from pynput.keyboard import Controller, Key
+            kb = Controller()
+            with kb.pressed(Key.ctrl):
+                kb.press('v')
+                kb.release('v')
+            print(f"[Paste] Pasted into window {hwnd}")
+
+        threading.Thread(target=_do_paste, daemon=True).start()
+
     # ── Model Loading ──────────────────────────────────────────────────────────
 
     def _load_model(self, model_size: str) -> None:
@@ -586,10 +726,7 @@ class Talk2TextApp(ctk.CTk):
     def _on_model_loaded(self, success: bool, error: Optional[str]) -> None:
         def _update():
             if success:
-                size = self._config["model_size"]
-                self.status_label.configure(
-                    text=f"Ready ({size}) — press Record to start", text_color="gray"
-                )
+                self.status_label.configure(text=self._idle_status(), text_color="gray")
                 self.record_btn.configure(state="normal")
             else:
                 self.status_label.configure(
@@ -610,13 +747,11 @@ class Talk2TextApp(ctk.CTk):
     def _on_settings_applied(self, new_config: dict) -> None:
         old_model = self._config.get("model_size")
         self._config = new_config
+        self._apply_hotkey(new_config)
         if new_config["model_size"] != old_model:
             self._load_model(new_config["model_size"])
         else:
-            size = new_config["model_size"]
-            self.status_label.configure(
-                text=f"Ready ({size}) — press Record to start", text_color="gray"
-            )
+            self.status_label.configure(text=self._idle_status(), text_color="gray")
 
     # ── Recording ─────────────────────────────────────────────────────────────
 
@@ -702,6 +837,12 @@ class Talk2TextApp(ctk.CTk):
             self.save_btn.configure(state="normal" if text else "disabled")
             self.copy_btn.configure(state="normal" if text else "disabled")
 
+            # If triggered via hotkey, paste into the original window
+            if self._dictate_target_hwnd and text:
+                self.clipboard_clear()
+                self.clipboard_append(text)
+                self._paste_to_dictate_target()
+
         self.after(0, _update)
 
     def _on_transcribe_error(self, error: str):
@@ -732,8 +873,7 @@ class Talk2TextApp(ctk.CTk):
             self.clipboard_append(text)
             self.status_label.configure(text="Copied to clipboard!", text_color="#27ae60")
             self.after(2000, lambda: self.status_label.configure(
-                text=f"Ready ({self._config['model_size']}) — press Record to start",
-                text_color="gray",
+                text=self._idle_status(), text_color="gray"
             ))
 
     def _save_as(self):
