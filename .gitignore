@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Models (large binary files — download on first run)
+models/
+
+# Auto-saved transcripts
+transcripts/
+
+# User config (machine-specific)
+settings.json
+
+# Temp audio file
+talk2text_recording.wav
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# AI task/plan files
+ai-tasks/
+
+# IDE
+.vscode/
+.idea/
+
+# Build / dist
+dist/
+build/
+*.spec
