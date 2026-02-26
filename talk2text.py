@@ -39,9 +39,16 @@ DEFAULT_CONFIG: dict = {
     "temperature":               0.0,
     "condition_on_previous_text": False,
     "hotkey_enabled":            True,
-    "hotkey":                    "<ctrl>+<shift>+<space>",
+    "hotkey":                    "<ctrl>+<alt>+d",
 }
 
+
+_LOG = _BASE / "debug.log"
+def _log(msg: str) -> None:
+    """Append timestamped message to debug.log."""
+    from datetime import datetime as _dt
+    with open(_LOG, "a", encoding="utf-8") as f:
+        f.write(f"[{_dt.now().strftime('%H:%M:%S.%f')[:-3]}] {msg}\n")
 
 def _format_hotkey(hotkey: str) -> str:
     """'<ctrl>+<shift>+space' → 'Ctrl+Shift+Space' for display."""
@@ -125,17 +132,30 @@ class HotkeyListener:
 
     def __init__(self):
         self._listener = None
+        self._last_fire = 0.0  # debounce timestamp
 
     def start(self, hotkey: str, callback: Callable) -> bool:
+        import time
         self.stop()
+        self._last_fire = 0.0
+
+        def _debounced():
+            now = time.monotonic()
+            if now - self._last_fire < 0.3:
+                _log(f"[Hotkey] debounce skip ({now - self._last_fire:.3f}s)")
+                return
+            self._last_fire = now
+            _log("[Hotkey] fired")
+            callback()
+
         try:
             from pynput import keyboard
-            self._listener = keyboard.GlobalHotKeys({hotkey: callback})
+            self._listener = keyboard.GlobalHotKeys({hotkey: _debounced})
             self._listener.start()
-            print(f"[Hotkey] Listening for {hotkey}")
+            _log(f"[Hotkey] Listening for {hotkey}")
             return True
         except Exception as e:
-            print(f"[Hotkey] Failed to start: {e}")
+            _log(f"[Hotkey] Failed to start: {e}")
             self._listener = None
             return False
 
@@ -143,7 +163,7 @@ class HotkeyListener:
         if self._listener:
             try:
                 self._listener.stop()
-                self._listener.join(timeout=0.5)  # wait for hook to fully unregister
+                self._listener.join(timeout=0.5)
             except Exception:
                 pass
             self._listener = None
@@ -581,6 +601,7 @@ class Talk2TextApp(ctk.CTk):
         self.transcriber = Transcriber()
         self.hotkey_listener = HotkeyListener()
         self._dictate_target_hwnd: Optional[int] = None
+        self._paste_pending = False
         self._timer_job = None
         self._last_save_path: Optional[str] = None
         self._settings_win: Optional[SettingsWindow] = None
@@ -588,6 +609,11 @@ class Talk2TextApp(ctk.CTk):
         self._build_ui()
         self._load_model(self._config["model_size"])
         self._apply_hotkey(self._config)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self) -> None:
+        self.hotkey_listener.stop()
+        self.destroy()
 
     # ── UI Construction ────────────────────────────────────────────────────────
 
@@ -681,8 +707,10 @@ class Talk2TextApp(ctk.CTk):
         return f"Ready ({size}) — press Record to start"
 
     def _apply_hotkey(self, config: dict) -> None:
+        _log(f"[ApplyHotkey] enabled={config.get('hotkey_enabled')} hotkey={config.get('hotkey')}")
         if config.get("hotkey_enabled") and config.get("hotkey"):
             def _on_hotkey():
+                _log("[OnHotkey] WM_HOTKEY received")
                 # Capture active window NOW before anything changes (Windows only).
                 # On other platforms use -1 as a sentinel so clipboard copy still fires.
                 if sys.platform == "win32":
@@ -701,6 +729,7 @@ class Talk2TextApp(ctk.CTk):
             self.hotkey_listener.stop()
 
     def _toggle_record_via_hotkey(self, hwnd: int) -> None:
+        _log(f"[Toggle] recording={self.recorder.recording} btn={self.record_btn.cget('state')} hwnd={hwnd}")
         if self.recorder.recording:
             self._stop_record()
         elif self.record_btn.cget("state") == "normal":
@@ -714,12 +743,15 @@ class Talk2TextApp(ctk.CTk):
     def _paste_to_dictate_target(self, text: str) -> None:
         hwnd = self._dictate_target_hwnd
         self._dictate_target_hwnd = None
-        if not hwnd:
+        if not hwnd or self._paste_pending:
+            _log(f"[Paste] SKIPPED (hwnd={hwnd}, pending={self._paste_pending})")
             return
+        self._paste_pending = True
+        _log(f"[Paste] Called for hwnd={hwnd}, text={text[:50]!r}")
         if sys.platform != "win32":
-            # On Mac put text in clipboard; user pastes manually with Cmd+V.
             self.clipboard_clear()
             self.clipboard_append(text)
+            self._paste_pending = False
             return
 
         def _do_paste():
@@ -728,59 +760,70 @@ class Talk2TextApp(ctk.CTk):
             import time
             user32 = ctypes.windll.user32
             kernel32 = ctypes.windll.kernel32
-            if not user32.IsWindow(hwnd):
-                print("[Paste] Target window no longer exists")
-                return
-            # Restore and bring target window to front
-            user32.ShowWindow(hwnd, 9)   # SW_RESTORE
-            user32.SetForegroundWindow(hwnd)
-            time.sleep(0.15)             # let focus settle
+            # Set proper arg/return types for 64-bit pointer APIs
+            kernel32.GlobalAlloc.argtypes = [wt.UINT, ctypes.c_size_t]
+            kernel32.GlobalAlloc.restype = ctypes.c_void_p
+            kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+            kernel32.GlobalLock.restype = ctypes.c_void_p
+            kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+            user32.SetClipboardData.argtypes = [wt.UINT, ctypes.c_void_p]
+            try:
+                if not user32.IsWindow(hwnd):
+                    _log("[Paste] Target window no longer exists")
+                    return
 
-            # Set clipboard via Win32 API directly — avoids Tkinter releasing
-            # ownership when its window loses focus (which would empty the clipboard
-            # before the paste fires).
-            CF_UNICODETEXT = 13
-            GMEM_MOVEABLE = 0x0002
-            text_bytes = (text + "\0").encode("utf-16-le")
-            h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(text_bytes))
-            p = kernel32.GlobalLock(h)
-            ctypes.memmove(p, text_bytes, len(text_bytes))
-            kernel32.GlobalUnlock(h)
-            user32.OpenClipboard(0)
-            user32.EmptyClipboard()
-            user32.SetClipboardData(CF_UNICODETEXT, h)
-            user32.CloseClipboard()
+                # Set clipboard BEFORE switching focus — prevents clipboard-change
+                # listeners in the browser from auto-pasting when they see new data.
+                CF_UNICODETEXT = 13
+                GMEM_MOVEABLE = 0x0002
+                text_bytes = (text + "\0").encode("utf-16-le")
+                h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(text_bytes))
+                if not h:
+                    _log("[Paste] GlobalAlloc failed")
+                    return
+                p = kernel32.GlobalLock(h)
+                if not p:
+                    _log("[Paste] GlobalLock failed")
+                    return
+                ctypes.memmove(p, text_bytes, len(text_bytes))
+                kernel32.GlobalUnlock(h)
+                user32.OpenClipboard(0)
+                user32.EmptyClipboard()
+                user32.SetClipboardData(CF_UNICODETEXT, h)
+                user32.CloseClipboard()
 
-            # Send Ctrl+V via SendInput — bypasses pynput's hook pipeline.
-            # INPUT must be exactly 40 bytes on 64-bit Windows; including MOUSEINPUT
-            # in the union ensures the union is 32 bytes so INPUT = 4+4+32 = 40.
-            VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x11, 0x56, 0x0002, 1
+                user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+                user32.SetForegroundWindow(hwnd)
+                time.sleep(0.20)
 
-            class KEYBDINPUT(ctypes.Structure):
-                _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD),
-                            ("dwFlags", wt.DWORD), ("time", wt.DWORD),
-                            ("dwExtraInfo", ctypes.c_uint64)]  # ULONG_PTR
+                # Send Ctrl+V via SendInput
+                VK_CONTROL, VK_V = 0x11, 0x56
+                KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x0002, 1
 
-            class MOUSEINPUT(ctypes.Structure):
-                _fields_ = [("dx", wt.LONG), ("dy", wt.LONG),
-                            ("mouseData", wt.DWORD), ("dwFlags", wt.DWORD),
-                            ("time", wt.DWORD), ("dwExtraInfo", ctypes.c_uint64)]
+                class KEYBDINPUT(ctypes.Structure):
+                    _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD),
+                                ("dwFlags", wt.DWORD), ("time", wt.DWORD),
+                                ("dwExtraInfo", ctypes.c_uint64)]
+                class MOUSEINPUT(ctypes.Structure):
+                    _fields_ = [("dx", wt.LONG), ("dy", wt.LONG),
+                                ("mouseData", wt.DWORD), ("dwFlags", wt.DWORD),
+                                ("time", wt.DWORD), ("dwExtraInfo", ctypes.c_uint64)]
+                class _INPUTunion(ctypes.Union):
+                    _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
+                class INPUT(ctypes.Structure):
+                    _fields_ = [("type", wt.DWORD), ("_input", _INPUTunion)]
 
-            class _INPUTunion(ctypes.Union):
-                _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
+                def mk(vk, flags=0):
+                    i = INPUT(type=INPUT_KEYBOARD)
+                    i._input.ki = KEYBDINPUT(wVk=vk, dwFlags=flags)
+                    return i
 
-            class INPUT(ctypes.Structure):
-                _fields_ = [("type", wt.DWORD), ("_input", _INPUTunion)]
-
-            def mk(vk, flags=0):
-                i = INPUT(type=INPUT_KEYBOARD)
-                i._input.ki = KEYBDINPUT(wVk=vk, dwFlags=flags)
-                return i
-
-            seq = (INPUT * 4)(mk(VK_CONTROL), mk(VK_V),
-                              mk(VK_V, KEYEVENTF_KEYUP), mk(VK_CONTROL, KEYEVENTF_KEYUP))
-            user32.SendInput(4, seq, ctypes.sizeof(INPUT))
-            print(f"[Paste] Pasted into window {hwnd}")
+                seq = (INPUT * 4)(mk(VK_CONTROL), mk(VK_V),
+                                  mk(VK_V, KEYEVENTF_KEYUP), mk(VK_CONTROL, KEYEVENTF_KEYUP))
+                user32.SendInput(4, seq, ctypes.sizeof(INPUT))
+                _log(f"[Paste] SendInput Ctrl+V done for hwnd={hwnd}")
+            finally:
+                self._paste_pending = False
 
         threading.Thread(target=_do_paste, daemon=True).start()
 
