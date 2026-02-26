@@ -39,7 +39,7 @@ DEFAULT_CONFIG: dict = {
     "temperature":               0.0,
     "condition_on_previous_text": False,
     "hotkey_enabled":            True,
-    "hotkey":                    "<ctrl>+<alt>+d",
+    "hotkey":                    "<cmd>+<option>+d" if sys.platform == "darwin" else "<ctrl>+<alt>+d",
 }
 
 
@@ -422,9 +422,14 @@ class SettingsWindow(ctk.CTkToplevel):
             row=0, column=1, sticky="ew"
         )
 
+        hk_help = (
+            "Use pynput format, e.g.  <cmd>+<option>+<space>  or  <cmd>+r"
+            if sys.platform == "darwin" else
+            "Use pynput format, e.g.  <ctrl>+<alt>+<space>  or  <ctrl>+r"
+        )
         ctk.CTkLabel(
             self,
-            text="Use pynput format, e.g.  <ctrl>+<shift>+<space>  or  <alt>+r",
+            text=hk_help,
             font=ctk.CTkFont(size=10), text_color="gray",
         ).grid(row=r, column=0, padx=20, pady=(0, 10), sticky="w"); r += 1
 
@@ -749,8 +754,15 @@ class Talk2TextApp(ctk.CTk):
         self._paste_pending = True
         _log(f"[Paste] Called for hwnd={hwnd}, text={text[:50]!r}")
         if sys.platform != "win32":
+            # macOS: set clipboard then simulate Cmd+V via AppleScript
             self.clipboard_clear()
             self.clipboard_append(text)
+            if sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen([
+                    "osascript", "-e",
+                    'tell application "System Events" to keystroke "v" using command down',
+                ])
             self._paste_pending = False
             return
 
