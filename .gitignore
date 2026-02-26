@@ -23,6 +23,10 @@ env/
 # AI task/plan files
 ai-tasks/
 
+# Debug / test logs
+debug.log
+*.log
+
 # IDE
 .vscode/
 .idea/
@@ -31,3 +35,7 @@ ai-tasks/
 dist/
 build/
 *.spec
+
+# OS
+.DS_Store
+Thumbs.db
