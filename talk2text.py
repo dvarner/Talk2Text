@@ -119,14 +119,26 @@ class ModelManager:
 class HotkeyListener:
     """Global hotkey listener using pynput. Runs in its own daemon thread."""
 
+    _DEBOUNCE = 0.4  # seconds — ignore rapid re-fires (key repeat, frozen-exe quirks)
+
     def __init__(self):
         self._listener = None
+        self._last_fire = 0.0
 
     def start(self, hotkey: str, callback: Callable) -> bool:
         self.stop()
         try:
+            import time
             from pynput import keyboard
-            self._listener = keyboard.GlobalHotKeys({hotkey: callback})
+
+            def _guarded():
+                now = time.monotonic()
+                if now - self._last_fire < self._DEBOUNCE:
+                    return
+                self._last_fire = now
+                callback()
+
+            self._listener = keyboard.GlobalHotKeys({hotkey: _guarded})
             self._listener.start()
             print(f"[Hotkey] Listening for {hotkey}")
             return True
@@ -708,6 +720,7 @@ class Talk2TextApp(ctk.CTk):
 
         def _do_paste():
             import ctypes
+            import ctypes.wintypes as wt
             import time
             user32 = ctypes.windll.user32
             if not user32.IsWindow(hwnd):
@@ -717,12 +730,29 @@ class Talk2TextApp(ctk.CTk):
             user32.ShowWindow(hwnd, 9)   # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
             time.sleep(0.15)             # let focus settle
-            # Simulate Ctrl+V
-            from pynput.keyboard import Controller, Key
-            kb = Controller()
-            with kb.pressed(Key.ctrl):
-                kb.press('v')
-                kb.release('v')
+            # Send Ctrl+V via SendInput directly — avoids pynput's hook seeing
+            # its own synthetic events, which caused double-paste in frozen builds.
+            VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x11, 0x56, 0x0002, 1
+
+            class KEYBDINPUT(ctypes.Structure):
+                _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD),
+                            ("dwFlags", wt.DWORD), ("time", wt.DWORD),
+                            ("dwExtraInfo", ctypes.POINTER(wt.ULONG))]
+
+            class _INPUTunion(ctypes.Union):
+                _fields_ = [("ki", KEYBDINPUT)]
+
+            class INPUT(ctypes.Structure):
+                _fields_ = [("type", wt.DWORD), ("_input", _INPUTunion)]
+
+            def mk(vk, flags=0):
+                i = INPUT(type=INPUT_KEYBOARD)
+                i._input.ki = KEYBDINPUT(wVk=vk, dwFlags=flags)
+                return i
+
+            seq = (INPUT * 4)(mk(VK_CONTROL), mk(VK_V),
+                              mk(VK_V, KEYEVENTF_KEYUP), mk(VK_CONTROL, KEYEVENTF_KEYUP))
+            user32.SendInput(4, seq, ctypes.sizeof(INPUT))
             print(f"[Paste] Pasted into window {hwnd}")
 
         threading.Thread(target=_do_paste, daemon=True).start()
