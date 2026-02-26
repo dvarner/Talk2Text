@@ -119,26 +119,14 @@ class ModelManager:
 class HotkeyListener:
     """Global hotkey listener using pynput. Runs in its own daemon thread."""
 
-    _DEBOUNCE = 0.4  # seconds — ignore rapid re-fires (key repeat, frozen-exe quirks)
-
     def __init__(self):
         self._listener = None
-        self._last_fire = 0.0
 
     def start(self, hotkey: str, callback: Callable) -> bool:
         self.stop()
         try:
-            import time
             from pynput import keyboard
-
-            def _guarded():
-                now = time.monotonic()
-                if now - self._last_fire < self._DEBOUNCE:
-                    return
-                self._last_fire = now
-                callback()
-
-            self._listener = keyboard.GlobalHotKeys({hotkey: _guarded})
+            self._listener = keyboard.GlobalHotKeys({hotkey: callback})
             self._listener.start()
             print(f"[Hotkey] Listening for {hotkey}")
             return True
