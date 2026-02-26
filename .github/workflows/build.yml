@@ -25,6 +25,7 @@ jobs:
             --collect-all customtkinter \
             --collect-all faster_whisper \
             --collect-all ctranslate2 \
+            --collect-all pynput \
             --hidden-import huggingface_hub \
             --hidden-import tokenizers \
             --hidden-import sounddevice \
@@ -57,6 +58,7 @@ jobs:
             --collect-all customtkinter \
             --collect-all faster_whisper \
             --collect-all ctranslate2 \
+            --collect-all pynput \
             --hidden-import huggingface_hub \
             --hidden-import tokenizers \
             --hidden-import sounddevice \

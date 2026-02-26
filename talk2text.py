@@ -39,7 +39,7 @@ DEFAULT_CONFIG: dict = {
     "temperature":               0.0,
     "condition_on_previous_text": False,
     "hotkey_enabled":            True,
-    "hotkey":                    "<ctrl>+<shift>+space",
+    "hotkey":                    "<ctrl>+<shift>+<space>",
 }
 
 
@@ -64,6 +64,10 @@ def load_config() -> dict:
                     config[key] = data[key]
     except Exception as e:
         print(f"[Config] Load failed: {e}")
+    # Fix legacy hotkey format: bare 'space' must be '<space>' for pynput
+    hk = config.get("hotkey", "")
+    if hk.endswith("+space") and not hk.endswith("+<space>"):
+        config["hotkey"] = hk[:-5] + "<space>"
     return config
 
 
@@ -400,7 +404,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             self,
-            text="Use pynput format, e.g.  <ctrl>+<shift>+space  or  <alt>+r",
+            text="Use pynput format, e.g.  <ctrl>+<shift>+<space>  or  <alt>+r",
             font=ctk.CTkFont(size=10), text_color="gray",
         ).grid(row=r, column=0, padx=20, pady=(0, 10), sticky="w"); r += 1
 
@@ -687,7 +691,12 @@ class Talk2TextApp(ctk.CTk):
                 else:
                     hwnd = -1
                 self.after(0, lambda: self._toggle_record_via_hotkey(hwnd))
-            self.hotkey_listener.start(config["hotkey"], _on_hotkey)
+            ok = self.hotkey_listener.start(config["hotkey"], _on_hotkey)
+            if not ok:
+                self.status_label.configure(
+                    text=f"Hotkey failed — check format in Settings",
+                    text_color="#e74c3c",
+                )
         else:
             self.hotkey_listener.stop()
 
