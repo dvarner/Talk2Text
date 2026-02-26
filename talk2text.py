@@ -138,64 +138,6 @@ class HotkeyListener:
             self._listener = None
 
 
-# ── Tray Icon ─────────────────────────────────────────────────────────────────
-
-class TrayIcon:
-    """System tray icon using pystray. Runs in a daemon thread."""
-
-    def __init__(self, on_show: Callable, on_record: Callable, on_quit: Callable):
-        self._on_show = on_show
-        self._on_record = on_record
-        self._on_quit = on_quit
-        self._icon = None
-        self._recording = False
-
-    @staticmethod
-    def _make_image(recording: bool):
-        from PIL import Image, ImageDraw
-        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        bg = "#c0392b" if recording else "#2c3e50"
-        draw.ellipse([2, 2, 62, 62], fill=bg)
-        # Mic capsule
-        draw.rounded_rectangle([20, 8, 44, 34], radius=12, fill="white")
-        # Stand post
-        draw.rectangle([29, 34, 35, 46], fill="white")
-        # Stand arc
-        draw.arc([14, 28, 50, 50], start=0, end=180, fill="white", width=4)
-        # Base bar
-        draw.rectangle([22, 50, 42, 54], fill="white")
-        return img
-
-    def start(self) -> None:
-        import pystray
-        menu = pystray.Menu(
-            pystray.MenuItem("Show Window", lambda _: self._on_show(), default=True),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                lambda _: "Stop Recording" if self._recording else "Record",
-                lambda _: self._on_record(),
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", lambda _: self._on_quit()),
-        )
-        self._icon = pystray.Icon(
-            "Talk2Text", self._make_image(False), "Talk2Text", menu
-        )
-        threading.Thread(target=self._icon.run, daemon=True).start()
-
-    def set_recording(self, recording: bool) -> None:
-        self._recording = recording
-        if self._icon:
-            self._icon.icon = self._make_image(recording)
-            self._icon.title = "Talk2Text — Recording…" if recording else "Talk2Text"
-
-    def stop(self) -> None:
-        if self._icon:
-            self._icon.stop()
-            self._icon = None
-
-
 # ── Audio Recorder ─────────────────────────────────────────────────────────────
 
 class AudioRecorder:
@@ -627,11 +569,6 @@ class Talk2TextApp(ctk.CTk):
         self.recorder = AudioRecorder()
         self.transcriber = Transcriber()
         self.hotkey_listener = HotkeyListener()
-        self.tray = TrayIcon(
-            on_show=lambda: self.after(0, self._show_window),
-            on_record=lambda: self.after(0, self._toggle_record),
-            on_quit=lambda: self.after(0, self._quit_app),
-        )
         self._dictate_target_hwnd: Optional[int] = None
         self._timer_job = None
         self._last_save_path: Optional[str] = None
@@ -640,8 +577,6 @@ class Talk2TextApp(ctk.CTk):
         self._build_ui()
         self._load_model(self._config["model_size"])
         self._apply_hotkey(self._config)
-        self.tray.start()
-        self.protocol("WM_DELETE_WINDOW", self._hide_to_tray)
 
     # ── UI Construction ────────────────────────────────────────────────────────
 
@@ -809,19 +744,6 @@ class Talk2TextApp(ctk.CTk):
             self, self._config, on_apply=self._on_settings_applied
         )
 
-    def _hide_to_tray(self) -> None:
-        self.withdraw()
-
-    def _show_window(self) -> None:
-        self.deiconify()
-        self.lift()
-        self.focus_force()
-
-    def _quit_app(self) -> None:
-        self.tray.stop()
-        self.hotkey_listener.stop()
-        self.destroy()
-
     def _on_settings_applied(self, new_config: dict) -> None:
         old_model = self._config.get("model_size")
         self._config = new_config
@@ -857,7 +779,6 @@ class Talk2TextApp(ctk.CTk):
         self.save_path_label.configure(text="")
         self._last_save_path = None
         self.status_label.configure(text="Recording...", text_color="#e74c3c")
-        self.tray.set_recording(True)
         self._tick_timer()
 
     def _stop_record(self):
@@ -869,7 +790,6 @@ class Talk2TextApp(ctk.CTk):
         )
         self.timer_label.configure(text="")
         self.status_label.configure(text="Transcribing...", text_color="gray")
-        self.tray.set_recording(False)
 
         if audio_path:
             self.transcriber.transcribe_async(
