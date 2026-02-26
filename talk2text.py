@@ -139,6 +139,7 @@ class HotkeyListener:
         if self._listener:
             try:
                 self._listener.stop()
+                self._listener.join(timeout=0.5)  # wait for hook to fully unregister
             except Exception:
                 pass
             self._listener = None
@@ -691,11 +692,15 @@ class Talk2TextApp(ctk.CTk):
             self.hotkey_listener.stop()
 
     def _toggle_record_via_hotkey(self, hwnd: int) -> None:
-        if not self.recorder.recording:
+        if self.recorder.recording:
+            self._stop_record()
+        elif self.record_btn.cget("state") == "normal":
+            # Guard: if button is disabled (model loading or transcribing), ignore.
+            # pynput fires this callback twice per keypress on Windows — the second
+            # fire would otherwise restart recording mid-transcription, causing a
+            # second paste when that accidental recording finishes.
             self._dictate_target_hwnd = hwnd or None
             self._start_record()
-        else:
-            self._stop_record()
 
     def _paste_to_dictate_target(self, text: str) -> None:
         hwnd = self._dictate_target_hwnd
@@ -737,17 +742,23 @@ class Talk2TextApp(ctk.CTk):
             user32.SetClipboardData(CF_UNICODETEXT, h)
             user32.CloseClipboard()
 
-            # Send Ctrl+V via SendInput — bypasses pynput's hook so it can't
-            # double-fire through its own synthetic event pipeline.
+            # Send Ctrl+V via SendInput — bypasses pynput's hook pipeline.
+            # INPUT must be exactly 40 bytes on 64-bit Windows; including MOUSEINPUT
+            # in the union ensures the union is 32 bytes so INPUT = 4+4+32 = 40.
             VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x11, 0x56, 0x0002, 1
 
             class KEYBDINPUT(ctypes.Structure):
                 _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD),
                             ("dwFlags", wt.DWORD), ("time", wt.DWORD),
-                            ("dwExtraInfo", ctypes.POINTER(wt.ULONG))]
+                            ("dwExtraInfo", ctypes.c_uint64)]  # ULONG_PTR
+
+            class MOUSEINPUT(ctypes.Structure):
+                _fields_ = [("dx", wt.LONG), ("dy", wt.LONG),
+                            ("mouseData", wt.DWORD), ("dwFlags", wt.DWORD),
+                            ("time", wt.DWORD), ("dwExtraInfo", ctypes.c_uint64)]
 
             class _INPUTunion(ctypes.Union):
-                _fields_ = [("ki", KEYBDINPUT)]
+                _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
 
             class INPUT(ctypes.Structure):
                 _fields_ = [("type", wt.DWORD), ("_input", _INPUTunion)]
