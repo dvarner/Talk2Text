@@ -1,6 +1,7 @@
 """Talk2Text - Click record, speak, get a text file."""
 
 import json
+import sys
 import threading
 import tempfile
 from datetime import datetime
@@ -10,10 +11,15 @@ from typing import Callable, Optional
 import customtkinter as ctk
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-SAMPLE_RATE    = 16000
-TRANSCRIPTS_DIR = Path(__file__).parent / "transcripts"
-MODELS_DIR     = Path(__file__).parent / "models"
-SETTINGS_PATH  = Path(__file__).parent / "settings.json"
+SAMPLE_RATE = 16000
+
+# PyInstaller --onefile: __file__ points inside a temp extraction dir; use the
+# real executable's location instead so models/ and transcripts/ stay persistent.
+_BASE = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+
+TRANSCRIPTS_DIR = _BASE / "transcripts"
+MODELS_DIR      = _BASE / "models"
+SETTINGS_PATH   = _BASE / "settings.json"
 
 MODEL_SIZES = ["tiny", "base", "small", "medium", "large"]
 
@@ -672,9 +678,13 @@ class Talk2TextApp(ctk.CTk):
     def _apply_hotkey(self, config: dict) -> None:
         if config.get("hotkey_enabled") and config.get("hotkey"):
             def _on_hotkey():
-                # Capture active window NOW, in the hotkey thread, before anything changes
-                import ctypes
-                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                # Capture active window NOW before anything changes (Windows only).
+                # On other platforms use -1 as a sentinel so clipboard copy still fires.
+                if sys.platform == "win32":
+                    import ctypes
+                    hwnd = ctypes.windll.user32.GetForegroundWindow()
+                else:
+                    hwnd = -1
                 self.after(0, lambda: self._toggle_record_via_hotkey(hwnd))
             self.hotkey_listener.start(config["hotkey"], _on_hotkey)
         else:
@@ -691,6 +701,9 @@ class Talk2TextApp(ctk.CTk):
         hwnd = self._dictate_target_hwnd
         self._dictate_target_hwnd = None
         if not hwnd:
+            return
+        if sys.platform != "win32":
+            # Clipboard is already populated; user pastes manually (Cmd+V on Mac).
             return
 
         def _do_paste():
