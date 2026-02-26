@@ -709,13 +709,15 @@ class Talk2TextApp(ctk.CTk):
         else:
             self._stop_record()
 
-    def _paste_to_dictate_target(self) -> None:
+    def _paste_to_dictate_target(self, text: str) -> None:
         hwnd = self._dictate_target_hwnd
         self._dictate_target_hwnd = None
         if not hwnd:
             return
         if sys.platform != "win32":
-            # Clipboard is already populated; user pastes manually (Cmd+V on Mac).
+            # On Mac put text in clipboard; user pastes manually with Cmd+V.
+            self.clipboard_clear()
+            self.clipboard_append(text)
             return
 
         def _do_paste():
@@ -723,6 +725,7 @@ class Talk2TextApp(ctk.CTk):
             import ctypes.wintypes as wt
             import time
             user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
             if not user32.IsWindow(hwnd):
                 print("[Paste] Target window no longer exists")
                 return
@@ -730,8 +733,24 @@ class Talk2TextApp(ctk.CTk):
             user32.ShowWindow(hwnd, 9)   # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
             time.sleep(0.15)             # let focus settle
-            # Send Ctrl+V via SendInput directly — avoids pynput's hook seeing
-            # its own synthetic events, which caused double-paste in frozen builds.
+
+            # Set clipboard via Win32 API directly — avoids Tkinter releasing
+            # ownership when its window loses focus (which would empty the clipboard
+            # before the paste fires).
+            CF_UNICODETEXT = 13
+            GMEM_MOVEABLE = 0x0002
+            text_bytes = (text + "\0").encode("utf-16-le")
+            h = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(text_bytes))
+            p = kernel32.GlobalLock(h)
+            ctypes.memmove(p, text_bytes, len(text_bytes))
+            kernel32.GlobalUnlock(h)
+            user32.OpenClipboard(0)
+            user32.EmptyClipboard()
+            user32.SetClipboardData(CF_UNICODETEXT, h)
+            user32.CloseClipboard()
+
+            # Send Ctrl+V via SendInput — bypasses pynput's hook so it can't
+            # double-fire through its own synthetic event pipeline.
             VK_CONTROL, VK_V, KEYEVENTF_KEYUP, INPUT_KEYBOARD = 0x11, 0x56, 0x0002, 1
 
             class KEYBDINPUT(ctypes.Structure):
@@ -882,9 +901,7 @@ class Talk2TextApp(ctk.CTk):
 
             # If triggered via hotkey, paste into the original window
             if self._dictate_target_hwnd and text:
-                self.clipboard_clear()
-                self.clipboard_append(text)
-                self._paste_to_dictate_target()
+                self._paste_to_dictate_target(text)
 
         self.after(0, _update)
 
