@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../audio/recorder.dart';
+import '../storage/transcript_store.dart';
 import '../stt/transcription_engine.dart';
 import '../stt/whisper_engine.dart';
 
@@ -10,21 +11,29 @@ enum AppStatus { idle, recording, transcribing, error }
 
 /// Single source of truth for the screen, mirroring the desktop app's
 /// `Talk2TextApp` controller responsibilities (record toggle, live timer,
-/// transcribe-on-stop) but as a [ChangeNotifier] driving the Flutter UI.
+/// transcribe-on-stop, auto-save) but as a [ChangeNotifier] driving the UI.
 class AppController extends ChangeNotifier {
-  AppController({AudioCapture? recorder, TranscriptionEngine? engine})
-      : _recorder = recorder ?? Recorder(),
-        _engine = engine ?? WhisperEngine();
+  AppController({
+    AudioCapture? recorder,
+    TranscriptionEngine? engine,
+    TranscriptStore? store,
+  })  : _recorder = recorder ?? Recorder(),
+        _engine = engine ?? WhisperEngine(),
+        _store = store ?? FileTranscriptStore();
 
   final AudioCapture _recorder;
   // Becomes swappable in Phase 5 (engine picker); single engine for now.
   final TranscriptionEngine _engine;
+  final TranscriptStore _store;
 
   AppStatus _status = AppStatus.idle;
   AppStatus get status => _status;
 
   String _transcript = '';
   String get transcript => _transcript;
+
+  String? _savedPath;
+  String? get savedPath => _savedPath;
 
   String _message = 'Ready — tap Record to start';
   String get message => _message;
@@ -63,6 +72,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     _transcript = '';
+    _savedPath = null;
     _status = AppStatus.recording;
     _message = 'Recording…';
     _elapsed = Duration.zero;
@@ -100,14 +110,20 @@ class AppController extends ChangeNotifier {
       notifyListeners();
 
       _transcript = await _engine.transcribe(path);
+      _savedPath = await _store.save(_transcript);
       _status = AppStatus.idle;
-      _message = 'Done!';
+      _message = _savedPath != null ? 'Done! Saved.' : 'Done! (auto-save failed)';
     } catch (e) {
       _status = AppStatus.error;
       _message = 'Transcription failed: $e';
     }
     notifyListeners();
   }
+
+  // ── Saved transcripts (mobile has no file browser) ──────────────────────
+  Future<List<TranscriptFile>> listTranscripts() => _store.list();
+  Future<String> readTranscript(String path) => _store.read(path);
+  Future<void> deleteTranscript(String path) => _store.delete(path);
 
   @override
   void dispose() {
