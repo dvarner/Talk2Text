@@ -1,0 +1,30 @@
+name: talk2text_mobile
+description: "Talk2Text mobile — click record, speak, get a transcript."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management — lightweight ChangeNotifier wiring (mirrors the desktop
+  # app's single-controller simplicity).
+  provider: ^6.1.2
+
+  # Phase 1 — microphone capture + file paths.
+  record: ^5.1.2          # 16 kHz mono WAV recording, cross-platform.
+  path_provider: ^2.1.4   # app documents / temp directories.
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
