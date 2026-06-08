@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Phase 1: microphone capture for recording. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Phase 2: download the on-device Whisper model on first run. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Talk2Text"
         android:name="${applicationName}"

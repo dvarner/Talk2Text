@@ -7,7 +7,9 @@ plugins {
 android {
     namespace = "com.talk2text.talk2text_mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // whisper_ggml builds whisper.cpp via CMake and pins this NDK; align the
+    // app module so the AGP doesn't fail on an NDK version mismatch.
+    ndkVersion = "29.0.13113456"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

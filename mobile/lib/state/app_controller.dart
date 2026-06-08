@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../audio/recorder.dart';
 import '../stt/transcription_engine.dart';
+import '../stt/whisper_engine.dart';
 
 enum AppStatus { idle, recording, transcribing, error }
 
@@ -13,7 +14,7 @@ enum AppStatus { idle, recording, transcribing, error }
 class AppController extends ChangeNotifier {
   AppController({AudioCapture? recorder, TranscriptionEngine? engine})
       : _recorder = recorder ?? Recorder(),
-        _engine = engine ?? StubEngine();
+        _engine = engine ?? WhisperEngine();
 
   final AudioCapture _recorder;
   // Becomes swappable in Phase 5 (engine picker); single engine for now.
@@ -80,10 +81,6 @@ class AppController extends ChangeNotifier {
     _stopwatch.stop();
     final path = await _recorder.stop();
 
-    _status = AppStatus.transcribing;
-    _message = 'Transcribing…';
-    notifyListeners();
-
     if (path == null) {
       _status = AppStatus.error;
       _message = 'No audio captured. Try again.';
@@ -92,7 +89,16 @@ class AppController extends ChangeNotifier {
     }
 
     try {
-      if (!await _engine.isReady()) await _engine.prepare();
+      _status = AppStatus.transcribing;
+      if (!await _engine.isReady()) {
+        // First run downloads the model (e.g. ~142 MB for base).
+        _message = 'Downloading ${_engine.label} model (first run)…';
+        notifyListeners();
+        await _engine.prepare();
+      }
+      _message = 'Transcribing…';
+      notifyListeners();
+
       _transcript = await _engine.transcribe(path);
       _status = AppStatus.idle;
       _message = 'Done!';
