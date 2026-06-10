@@ -2,122 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
-import 'package:talk2text_mobile/audio/recorder.dart';
 import 'package:talk2text_mobile/home_page.dart';
 import 'package:talk2text_mobile/models/app_settings.dart';
 import 'package:talk2text_mobile/state/app_controller.dart';
-import 'package:talk2text_mobile/storage/secret_store.dart';
 import 'package:talk2text_mobile/storage/settings_store.dart';
-import 'package:talk2text_mobile/storage/transcript_store.dart';
 import 'package:talk2text_mobile/stt/transcription_engine.dart';
 
-/// In-memory capture that never touches platform channels, so the controller
-/// and UI can be exercised in plain unit/widget tests.
-class FakeCapture implements AudioCapture {
-  bool _recording = false;
-
-  @override
-  Future<bool> hasPermission() async => true;
-
-  @override
-  Future<bool> start() async {
-    _recording = true;
-    return true;
-  }
-
-  @override
-  Future<String?> stop() async {
-    _recording = false;
-    return '/tmp/fake.wav';
-  }
-
-  @override
-  Future<bool> isRecording() async => _recording;
-
-  @override
-  Future<void> dispose() async {}
-}
-
-/// In-memory transcript store for tests (no filesystem / path_provider).
-class FakeStore implements TranscriptStore {
-  final List<String> saved = [];
-
-  @override
-  Future<String?> save(String text, {DateTime? at}) async {
-    if (text.trim().isEmpty) return null;
-    saved.add(text);
-    return '/tmp/transcripts/fake.txt';
-  }
-
-  @override
-  Future<List<TranscriptFile>> list() async => const [];
-
-  @override
-  Future<void> delete(String path) async {}
-
-  @override
-  Future<String> read(String path) async => '';
-}
-
-/// In-memory settings store for tests (no shared_preferences channel).
-class FakeSettingsStore implements SettingsStore {
-  AppSettings saved = AppSettings.defaults;
-
-  @override
-  Future<AppSettings> load() async => saved;
-
-  @override
-  Future<void> save(AppSettings settings) async => saved = settings;
-}
-
-/// In-memory secret store for tests (no flutter_secure_storage channel).
-class FakeSecretStore implements SecretStore {
-  String? key;
-
-  @override
-  Future<String?> getApiKey() async => key;
-
-  @override
-  Future<void> setApiKey(String value) async => key = value;
-
-  @override
-  Future<void> clearApiKey() async => key = null;
-
-  @override
-  Future<bool> hasApiKey() async => key != null && key!.isNotEmpty;
-}
-
-/// Fake live engine (OS-recognizer style) recording its lifecycle calls.
-class FakeLiveEngine implements LiveTranscriptionEngine {
-  bool started = false;
-  bool stopped = false;
-
-  @override
-  String get id => 'live';
-  @override
-  String get label => 'Device speech';
-  @override
-  void configure(AppSettings settings) {}
-  @override
-  Future<bool> isReady() async => true;
-  @override
-  Future<void> prepare() async {}
-  @override
-  Future<bool> startListening() async {
-    started = true;
-    return true;
-  }
-
-  @override
-  Future<String> stopListening() async {
-    stopped = true;
-    return 'live transcript';
-  }
-
-  @override
-  Future<String> transcribe(String wavPath) =>
-      throw UnsupportedError('live engine');
-}
+import 'fakes.dart';
 
 AppController _controller({SettingsStore? settingsStore}) => AppController(
       recorder: FakeCapture(),
