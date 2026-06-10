@@ -26,6 +26,18 @@ abstract class TranscriptionEngine {
   Future<String> transcribe(String wavPath);
 }
 
+/// Engines that capture live from the microphone (the OS speech recognizers)
+/// rather than transcribing a recorded file. The controller drives these via
+/// [startListening] / [stopListening] instead of the file recorder + transcribe,
+/// since platforms like Android can't feed a recorded file to SpeechRecognizer.
+abstract class LiveTranscriptionEngine implements TranscriptionEngine {
+  /// Begins live recognition. Returns false if it couldn't start.
+  Future<bool> startListening();
+
+  /// Stops recognition and returns the recognized text.
+  Future<String> stopListening();
+}
+
 /// Placeholder engine used until the on-device Whisper backend lands in
 /// Phase 2. It keeps the record → transcribe → display loop runnable
 /// end-to-end so the app is demoable from Phase 1.

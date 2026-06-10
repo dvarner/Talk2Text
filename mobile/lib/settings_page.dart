@@ -124,9 +124,12 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            _engineId == 'whisper'
-                ? 'Runs fully offline on your device.'
-                : 'Sends audio to your configured API. Requires a key.',
+            switch (_engineId) {
+              'whisper' => 'Runs fully offline on your device.',
+              'native' =>
+                "Uses your device's built-in speech recognition. No download.",
+              _ => 'Sends audio to your configured API. Requires a key.',
+            },
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
 

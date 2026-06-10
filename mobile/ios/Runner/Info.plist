@@ -10,6 +10,8 @@
 	<string>Talk2Text</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Talk2Text needs microphone access to record your voice for transcription.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Talk2Text uses speech recognition to transcribe your voice on device.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

@@ -8,6 +8,7 @@ import '../storage/secret_store.dart';
 import '../storage/settings_store.dart';
 import '../storage/transcript_store.dart';
 import '../stt/cloud_engine.dart';
+import '../stt/native_speech_engine.dart';
 import '../stt/transcription_engine.dart';
 import '../stt/whisper_engine.dart';
 
@@ -33,6 +34,7 @@ class AppController extends ChangeNotifier {
       engines ??
           {
             'whisper': WhisperEngine(),
+            'native': NativeSpeechEngine(),
             'cloud': CloudEngine(secretStore: secrets),
           },
     );
@@ -151,10 +153,14 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _start() async {
-    final ok = await _recorder.start();
+    final engine = _engine;
+    // Live engines (OS recognizers) capture themselves; others use the recorder.
+    final ok = engine is LiveTranscriptionEngine
+        ? await engine.startListening()
+        : await _recorder.start();
     if (!ok) {
       _status = AppStatus.error;
-      _message = 'Could not open microphone. Check permissions.';
+      _message = 'Could not start. Check microphone permissions.';
       notifyListeners();
       return;
     }
@@ -176,27 +182,33 @@ class AppController extends ChangeNotifier {
   Future<void> _stop() async {
     _timer?.cancel();
     _stopwatch.stop();
-    final path = await _recorder.stop();
-
-    if (path == null) {
-      _status = AppStatus.error;
-      _message = 'No audio captured. Try again.';
-      notifyListeners();
-      return;
-    }
+    final engine = _engine;
 
     try {
       _status = AppStatus.transcribing;
-      if (!await _engine.isReady()) {
-        // First run downloads the model (e.g. ~142 MB for base).
-        _message = 'Downloading ${_engine.label} model (first run)…';
+      if (engine is LiveTranscriptionEngine) {
+        _message = 'Finishing…';
         notifyListeners();
-        await _engine.prepare();
+        _transcript = await engine.stopListening();
+      } else {
+        final path = await _recorder.stop();
+        if (path == null) {
+          _status = AppStatus.error;
+          _message = 'No audio captured. Try again.';
+          notifyListeners();
+          return;
+        }
+        if (!await engine.isReady()) {
+          // First run downloads the model (e.g. ~142 MB for base).
+          _message = 'Downloading ${engine.label} model (first run)…';
+          notifyListeners();
+          await engine.prepare();
+        }
+        _message = 'Transcribing…';
+        notifyListeners();
+        _transcript = await engine.transcribe(path);
       }
-      _message = 'Transcribing…';
-      notifyListeners();
 
-      _transcript = await _engine.transcribe(path);
       _savedPath = await _store.save(_transcript);
       _status = AppStatus.idle;
       _message = _savedPath != null ? 'Done! Saved.' : 'Done! (auto-save failed)';

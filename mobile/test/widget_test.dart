@@ -87,6 +87,38 @@ class FakeSecretStore implements SecretStore {
   Future<bool> hasApiKey() async => key != null && key!.isNotEmpty;
 }
 
+/// Fake live engine (OS-recognizer style) recording its lifecycle calls.
+class FakeLiveEngine implements LiveTranscriptionEngine {
+  bool started = false;
+  bool stopped = false;
+
+  @override
+  String get id => 'live';
+  @override
+  String get label => 'Device speech';
+  @override
+  void configure(AppSettings settings) {}
+  @override
+  Future<bool> isReady() async => true;
+  @override
+  Future<void> prepare() async {}
+  @override
+  Future<bool> startListening() async {
+    started = true;
+    return true;
+  }
+
+  @override
+  Future<String> stopListening() async {
+    stopped = true;
+    return 'live transcript';
+  }
+
+  @override
+  Future<String> transcribe(String wavPath) =>
+      throw UnsupportedError('live engine');
+}
+
 AppController _controller({SettingsStore? settingsStore}) => AppController(
       recorder: FakeCapture(),
       engines: {'stub': StubEngine()},
@@ -149,6 +181,28 @@ void main() {
     expect(secrets.key, 'sk-test');
     await c.clearApiKey();
     expect(await c.hasApiKey(), isFalse);
+  });
+
+  test('live engine path uses startListening/stopListening, not the recorder',
+      () async {
+    final live = FakeLiveEngine();
+    final capture = FakeCapture();
+    final c = AppController(
+      recorder: capture,
+      engines: {'live': live},
+      store: FakeStore(),
+      settingsStore: FakeSettingsStore(),
+      secretStore: FakeSecretStore(),
+    );
+
+    await c.toggleRecord(); // start → startListening
+    expect(live.started, isTrue);
+    expect(c.isRecording, isTrue);
+
+    await c.toggleRecord(); // stop → stopListening
+    expect(live.stopped, isTrue);
+    expect(c.transcript, 'live transcript');
+    expect(c.status, AppStatus.idle);
   });
 
   testWidgets('home screen shows the action buttons', (tester) async {
