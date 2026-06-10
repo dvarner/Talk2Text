@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'home_page.dart';
+import 'platform/process_text.dart';
+import 'process_text_page.dart';
 import 'state/app_controller.dart';
 
 void main() {
@@ -25,8 +27,38 @@ class Talk2TextApp extends StatelessWidget {
             brightness: Brightness.dark,
           ),
         ),
-        home: const HomePage(),
+        home: const _Root(),
       ),
+    );
+  }
+}
+
+/// Chooses the start screen: the process-text editor when launched from another
+/// app's selection menu (Android), otherwise the normal home screen.
+class _Root extends StatefulWidget {
+  const _Root();
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  final Future<String?> _initialText = const ProcessTextService().getInitialText();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _initialText,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(body: SizedBox.shrink());
+        }
+        final selected = snapshot.data;
+        if (selected != null && selected.isNotEmpty) {
+          return ProcessTextPage(initialText: selected);
+        }
+        return const HomePage();
+      },
     );
   }
 }
