@@ -23,6 +23,8 @@ dependencies:
   whisper_ggml: ^1.7.0
   share_plus: ^13.1.0
   shared_preferences: ^2.5.5
+  flutter_secure_storage: ^10.3.1
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

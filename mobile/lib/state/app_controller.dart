@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 
 import '../audio/recorder.dart';
 import '../models/app_settings.dart';
+import '../storage/secret_store.dart';
 import '../storage/settings_store.dart';
 import '../storage/transcript_store.dart';
+import '../stt/cloud_engine.dart';
 import '../stt/transcription_engine.dart';
 import '../stt/whisper_engine.dart';
 
@@ -15,21 +17,50 @@ enum AppStatus { idle, recording, transcribing, error }
 /// `Talk2TextApp` controller responsibilities (record toggle, live timer,
 /// transcribe-on-stop, auto-save, settings) but as a [ChangeNotifier].
 class AppController extends ChangeNotifier {
-  AppController({
+  factory AppController({
     AudioCapture? recorder,
-    TranscriptionEngine? engine,
     TranscriptStore? store,
     SettingsStore? settingsStore,
-  })  : _recorder = recorder ?? Recorder(),
-        _engine = engine ?? WhisperEngine(),
-        _store = store ?? FileTranscriptStore(),
-        _settingsStore = settingsStore ?? PrefsSettingsStore();
+    SecretStore? secretStore,
+    Map<String, TranscriptionEngine>? engines,
+  }) {
+    final secrets = secretStore ?? SecureSecretStore();
+    return AppController._(
+      recorder ?? Recorder(),
+      store ?? FileTranscriptStore(),
+      settingsStore ?? PrefsSettingsStore(),
+      secrets,
+      engines ??
+          {
+            'whisper': WhisperEngine(),
+            'cloud': CloudEngine(secretStore: secrets),
+          },
+    );
+  }
+
+  AppController._(
+    this._recorder,
+    this._store,
+    this._settingsStore,
+    this._secretStore,
+    this._engines,
+  );
 
   final AudioCapture _recorder;
-  // Becomes swappable in Phase 5 (engine picker); single engine for now.
-  final TranscriptionEngine _engine;
   final TranscriptStore _store;
   final SettingsStore _settingsStore;
+  final SecretStore _secretStore;
+
+  /// Available engines keyed by id; the active one is chosen by
+  /// [AppSettings.engineId].
+  final Map<String, TranscriptionEngine> _engines;
+
+  /// The engine selected in settings, falling back to the first registered.
+  TranscriptionEngine get _engine =>
+      _engines[_settings.engineId] ?? _engines.values.first;
+
+  /// Engines available for the settings picker.
+  List<TranscriptionEngine> get engines => _engines.values.toList();
 
   AppSettings _settings = AppSettings.defaults;
   AppSettings get settings => _settings;
@@ -56,21 +87,21 @@ class AppController extends ChangeNotifier {
   bool get isBusy => _status == AppStatus.transcribing;
   bool get hasTranscript => _transcript.trim().isNotEmpty;
 
-  /// Loads persisted settings and applies them to the active engine. Call once
-  /// at startup (e.g. `AppController()..init()`).
+  /// Loads persisted settings and applies them to every engine. Call once at
+  /// startup (e.g. `AppController()..init()`).
   Future<void> init() async {
     _settings = await _settingsStore.load();
-    _engine.configure(_settings);
+    _configureEngines();
     if (_status == AppStatus.idle) {
       _message = _idleMessage();
       notifyListeners();
     }
   }
 
-  /// Persists [settings] and reconfigures the engine (model size / language).
+  /// Persists [settings] and reconfigures every engine (model, language, cloud).
   Future<void> applySettings(AppSettings settings) async {
     _settings = settings;
-    _engine.configure(settings);
+    _configureEngines();
     await _settingsStore.save(settings);
     if (_status == AppStatus.idle) {
       _message = _idleMessage();
@@ -78,8 +109,31 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _idleMessage() =>
-      'Ready (${_settings.modelSize}) — tap Record to start';
+  void _configureEngines() {
+    for (final engine in _engines.values) {
+      engine.configure(_settings);
+    }
+  }
+
+  // ── Cloud API key (secure storage) ──────────────────────────────────────
+  Future<bool> hasApiKey() => _secretStore.hasApiKey();
+
+  Future<void> setApiKey(String key) async {
+    await _secretStore.setApiKey(key.trim());
+    notifyListeners();
+  }
+
+  Future<void> clearApiKey() async {
+    await _secretStore.clearApiKey();
+    notifyListeners();
+  }
+
+  String _idleMessage() {
+    final label = _settings.engineId == 'whisper'
+        ? _settings.modelSize
+        : _engine.label;
+    return 'Ready ($label) — tap Record to start';
+  }
 
   /// "MM:SS" elapsed-time label, matching the desktop timer format.
   String get timerLabel {
