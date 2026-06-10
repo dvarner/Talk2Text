@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:whisper_ggml/whisper_ggml.dart';
 
+import '../models/app_settings.dart';
 import 'transcription_engine.dart';
 
 /// On-device Whisper backend (whisper.cpp via the `whisper_ggml` plugin).
@@ -29,6 +30,25 @@ class WhisperEngine implements TranscriptionEngine {
 
   @override
   String get label => 'On-device Whisper';
+
+  @override
+  void configure(AppSettings settings) {
+    model = modelForSize(settings.modelSize);
+    language = settings.language;
+  }
+
+  /// Maps a settings size key to the whisper_ggml multilingual model.
+  static WhisperModel modelForSize(String size) {
+    switch (size) {
+      case 'tiny':
+        return WhisperModel.tiny;
+      case 'small':
+        return WhisperModel.small;
+      case 'base':
+      default:
+        return WhisperModel.base;
+    }
+  }
 
   @override
   Future<bool> isReady() async {

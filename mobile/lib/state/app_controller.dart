@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../audio/recorder.dart';
+import '../models/app_settings.dart';
+import '../storage/settings_store.dart';
 import '../storage/transcript_store.dart';
 import '../stt/transcription_engine.dart';
 import '../stt/whisper_engine.dart';
@@ -11,20 +13,26 @@ enum AppStatus { idle, recording, transcribing, error }
 
 /// Single source of truth for the screen, mirroring the desktop app's
 /// `Talk2TextApp` controller responsibilities (record toggle, live timer,
-/// transcribe-on-stop, auto-save) but as a [ChangeNotifier] driving the UI.
+/// transcribe-on-stop, auto-save, settings) but as a [ChangeNotifier].
 class AppController extends ChangeNotifier {
   AppController({
     AudioCapture? recorder,
     TranscriptionEngine? engine,
     TranscriptStore? store,
+    SettingsStore? settingsStore,
   })  : _recorder = recorder ?? Recorder(),
         _engine = engine ?? WhisperEngine(),
-        _store = store ?? FileTranscriptStore();
+        _store = store ?? FileTranscriptStore(),
+        _settingsStore = settingsStore ?? PrefsSettingsStore();
 
   final AudioCapture _recorder;
   // Becomes swappable in Phase 5 (engine picker); single engine for now.
   final TranscriptionEngine _engine;
   final TranscriptStore _store;
+  final SettingsStore _settingsStore;
+
+  AppSettings _settings = AppSettings.defaults;
+  AppSettings get settings => _settings;
 
   AppStatus _status = AppStatus.idle;
   AppStatus get status => _status;
@@ -47,6 +55,31 @@ class AppController extends ChangeNotifier {
   bool get isRecording => _status == AppStatus.recording;
   bool get isBusy => _status == AppStatus.transcribing;
   bool get hasTranscript => _transcript.trim().isNotEmpty;
+
+  /// Loads persisted settings and applies them to the active engine. Call once
+  /// at startup (e.g. `AppController()..init()`).
+  Future<void> init() async {
+    _settings = await _settingsStore.load();
+    _engine.configure(_settings);
+    if (_status == AppStatus.idle) {
+      _message = _idleMessage();
+      notifyListeners();
+    }
+  }
+
+  /// Persists [settings] and reconfigures the engine (model size / language).
+  Future<void> applySettings(AppSettings settings) async {
+    _settings = settings;
+    _engine.configure(settings);
+    await _settingsStore.save(settings);
+    if (_status == AppStatus.idle) {
+      _message = _idleMessage();
+    }
+    notifyListeners();
+  }
+
+  String _idleMessage() =>
+      'Ready (${_settings.modelSize}) — tap Record to start';
 
   /// "MM:SS" elapsed-time label, matching the desktop timer format.
   String get timerLabel {

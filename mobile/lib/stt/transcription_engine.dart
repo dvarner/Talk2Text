@@ -1,3 +1,5 @@
+import '../models/app_settings.dart';
+
 /// The pluggable STT boundary. Every backend — on-device Whisper (default),
 /// OS-native speech, or a cloud API — implements this interface, so the UI and
 /// controller never need to know which engine actually ran. This mirrors the
@@ -8,6 +10,10 @@ abstract class TranscriptionEngine {
 
   /// Human-readable name shown in the settings engine picker.
   String get label;
+
+  /// Apply user settings (model size, language, …). Engines use what applies
+  /// to them and ignore the rest.
+  void configure(AppSettings settings);
 
   /// True when the engine is ready to transcribe (model downloaded for
   /// on-device, API key present for cloud, etc.).
@@ -29,6 +35,9 @@ class StubEngine implements TranscriptionEngine {
 
   @override
   String get label => 'Placeholder';
+
+  @override
+  void configure(AppSettings settings) {}
 
   @override
   Future<bool> isReady() async => true;
