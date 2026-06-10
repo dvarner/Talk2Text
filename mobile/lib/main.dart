@@ -14,7 +14,8 @@ class Talk2TextApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => AppController(),
+      create: (_) => AppController()..init(),
+      lazy: false,
       child: MaterialApp(
         title: 'Talk2Text',
         debugShowCheckedModeBanner: false,

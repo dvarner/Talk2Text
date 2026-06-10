@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import 'package:talk2text_mobile/audio/recorder.dart';
 import 'package:talk2text_mobile/home_page.dart';
+import 'package:talk2text_mobile/models/app_settings.dart';
 import 'package:talk2text_mobile/state/app_controller.dart';
+import 'package:talk2text_mobile/storage/settings_store.dart';
 import 'package:talk2text_mobile/storage/transcript_store.dart';
 import 'package:talk2text_mobile/stt/transcription_engine.dart';
 
@@ -56,10 +58,22 @@ class FakeStore implements TranscriptStore {
   Future<String> read(String path) async => '';
 }
 
+/// In-memory settings store for tests (no shared_preferences channel).
+class FakeSettingsStore implements SettingsStore {
+  AppSettings saved = AppSettings.defaults;
+
+  @override
+  Future<AppSettings> load() async => saved;
+
+  @override
+  Future<void> save(AppSettings settings) async => saved = settings;
+}
+
 AppController _controller() => AppController(
       recorder: FakeCapture(),
       engine: StubEngine(),
       store: FakeStore(),
+      settingsStore: FakeSettingsStore(),
     );
 
 void main() {
@@ -84,6 +98,22 @@ void main() {
     expect(c.hasTranscript, isTrue);
     expect(c.savedPath, isNotNull);
     expect(store.saved, hasLength(1));
+  });
+
+  test('applySettings persists and reconfigures the engine', () async {
+    final settingsStore = FakeSettingsStore();
+    final c = AppController(
+      recorder: FakeCapture(),
+      engine: StubEngine(),
+      store: FakeStore(),
+      settingsStore: settingsStore,
+    );
+
+    const next = AppSettings(modelSize: 'small', language: 'fr');
+    await c.applySettings(next);
+
+    expect(c.settings, next);
+    expect(settingsStore.saved, next);
   });
 
   testWidgets('home screen shows the action buttons', (tester) async {

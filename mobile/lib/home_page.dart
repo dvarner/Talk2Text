@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'settings_page.dart';
 import 'state/app_controller.dart';
 import 'transcripts_page.dart';
 
@@ -24,14 +25,12 @@ class HomePage extends StatelessWidget {
           IconButton(
             tooltip: 'Saved transcripts',
             icon: const Icon(Icons.folder_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ChangeNotifierProvider<AppController>.value(
-                  value: c,
-                  child: const TranscriptsPage(),
-                ),
-              ),
-            ),
+            onPressed: () => _push(context, c, const TranscriptsPage()),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => _push(context, c, const SettingsPage()),
           ),
         ],
       ),
@@ -95,6 +94,19 @@ class HomePage extends StatelessWidget {
               _ActionRow(controller: c),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Pushes [page] while forwarding the existing controller (routes are a
+  /// separate subtree and don't inherit the home page's Provider otherwise).
+  void _push(BuildContext context, AppController c, Widget page) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChangeNotifierProvider<AppController>.value(
+          value: c,
+          child: page,
         ),
       ),
     );
