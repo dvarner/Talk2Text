@@ -4,10 +4,11 @@ __pycache__/
 *.pyo
 
 # Models (large binary files — download on first run)
-models/
+# Anchored to the desktop app's root dir so it doesn't swallow mobile/lib/models/
+/models/
 
-# Auto-saved transcripts
-transcripts/
+# Auto-saved transcripts (desktop app's root output dir)
+/transcripts/
 
 # User config (machine-specific)
 settings.json
