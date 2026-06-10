@@ -5,9 +5,9 @@ import 'models/app_settings.dart';
 import 'models/model_catalog.dart';
 import 'state/app_controller.dart';
 
-/// Settings screen — Whisper model size and language, mirroring the desktop
-/// app's Settings window (minus desktop-only bits). Changes persist via
-/// shared_preferences and reconfigure the active engine on Apply.
+/// Settings screen — engine selection, on-device model size, language, and the
+/// optional cloud API key. Mirrors the desktop Settings window (mobile subset),
+/// persisting via shared_preferences (key via secure storage) on Apply.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -16,41 +16,95 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  late String _engineId;
   late String _modelSize;
   late TextEditingController _language;
+  late TextEditingController _cloudUrl;
+  late TextEditingController _cloudModel;
+  late TextEditingController _apiKey;
+
+  bool _hasSavedKey = false;
 
   @override
   void initState() {
     super.initState();
-    final s = context.read<AppController>().settings;
+    final c = context.read<AppController>();
+    final s = c.settings;
+    _engineId = s.engineId;
     _modelSize = s.modelSize;
     _language = TextEditingController(text: s.language);
+    _cloudUrl = TextEditingController(text: s.cloudBaseUrl);
+    _cloudModel = TextEditingController(text: s.cloudModel);
+    _apiKey = TextEditingController();
+    c.hasApiKey().then((v) {
+      if (mounted) setState(() => _hasSavedKey = v);
+    });
   }
 
   @override
   void dispose() {
     _language.dispose();
+    _cloudUrl.dispose();
+    _cloudModel.dispose();
+    _apiKey.dispose();
     super.dispose();
   }
 
+  Future<void> _saveKey() async {
+    final c = context.read<AppController>();
+    final key = _apiKey.text.trim();
+    if (key.isEmpty) return;
+    await c.setApiKey(key);
+    _apiKey.clear();
+    if (mounted) {
+      setState(() => _hasSavedKey = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('API key saved')),
+      );
+    }
+  }
+
+  Future<void> _clearKey() async {
+    final c = context.read<AppController>();
+    await c.clearApiKey();
+    if (mounted) setState(() => _hasSavedKey = false);
+  }
+
   Future<void> _apply() async {
-    final settings = AppSettings(
+    final c = context.read<AppController>();
+    if (_engineId == 'cloud' && !_hasSavedKey) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add an API key to use the Cloud engine')),
+      );
+      return;
+    }
+    await c.applySettings(AppSettings(
+      engineId: _engineId,
       modelSize: _modelSize,
       language: _language.text.trim(),
-    );
-    await context.read<AppController>().applySettings(settings);
+      cloudBaseUrl: _cloudUrl.text.trim().isEmpty
+          ? AppSettings.defaults.cloudBaseUrl
+          : _cloudUrl.text.trim(),
+      cloudModel: _cloudModel.text.trim().isEmpty
+          ? AppSettings.defaults.cloudModel
+          : _cloudModel.text.trim(),
+    ));
     if (mounted) Navigator.of(context).pop();
   }
 
   void _reset() {
     setState(() {
+      _engineId = AppSettings.defaults.engineId;
       _modelSize = AppSettings.defaults.modelSize;
       _language.text = AppSettings.defaults.language;
+      _cloudUrl.text = AppSettings.defaults.cloudBaseUrl;
+      _cloudModel.text = AppSettings.defaults.cloudModel;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.read<AppController>();
     final info = ModelCatalog.infoFor(_modelSize);
 
     return Scaffold(
@@ -58,26 +112,104 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const _SectionLabel('Model'),
+          const _SectionLabel('Engine'),
           const SizedBox(height: 8),
           SegmentedButton<String>(
             segments: [
-              for (final m in ModelCatalog.models)
-                ButtonSegment(value: m.size, label: Text(m.size)),
+              for (final e in c.engines)
+                ButtonSegment(value: e.id, label: Text(e.label)),
             ],
-            selected: {_modelSize},
-            onSelectionChanged: (s) => setState(() => _modelSize = s.first),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Disk: ${info.disk}  ·  ${info.note}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            selected: {_engineId},
+            onSelectionChanged: (s) => setState(() => _engineId = s.first),
           ),
           const SizedBox(height: 6),
           Text(
-            'The model downloads automatically the first time you record with it.',
+            _engineId == 'whisper'
+                ? 'Runs fully offline on your device.'
+                : 'Sends audio to your configured API. Requires a key.',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
+
+          if (_engineId == 'whisper') ...[
+            const Divider(height: 32),
+            const _SectionLabel('On-device model'),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: [
+                for (final m in ModelCatalog.models)
+                  ButtonSegment(value: m.size, label: Text(m.size)),
+              ],
+              selected: {_modelSize},
+              onSelectionChanged: (s) => setState(() => _modelSize = s.first),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Disk: ${info.disk}  ·  ${info.note}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'The model downloads automatically the first time you record.',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+          ],
+
+          if (_engineId == 'cloud') ...[
+            const Divider(height: 32),
+            const _SectionLabel('Cloud API'),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  _hasSavedKey ? Icons.check_circle : Icons.error_outline,
+                  size: 16,
+                  color: _hasSavedKey ? Colors.green : Colors.orange,
+                ),
+                const SizedBox(width: 6),
+                Text(_hasSavedKey ? 'API key saved' : 'No API key set'),
+                const Spacer(),
+                if (_hasSavedKey)
+                  TextButton(onPressed: _clearKey, child: const Text('Clear')),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _apiKey,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Paste API key',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _saveKey, child: const Text('Save')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _cloudUrl,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Base URL',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _cloudModel,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Model',
+                isDense: true,
+              ),
+            ),
+          ],
+
           const Divider(height: 32),
           const _SectionLabel('Language'),
           const SizedBox(height: 8),
