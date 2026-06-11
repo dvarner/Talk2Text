@@ -34,6 +34,9 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      # Accept SDK licenses so Gradle can fetch the NDK whisper_ggml pins.
+      - name: Accept Android SDK licenses
+        run: yes | flutter doctor --android-licenses || true
       - run: flutter build apk --debug
 
       - uses: actions/upload-artifact@v4
@@ -53,6 +56,7 @@ jobs:
 
       - run: flutter pub get
       - run: flutter test
-      # Unsigned build — needs no Apple account. Signing + TestFlight added once
-      # the Apple Developer Program is set up (see plan).
-      - run: flutter build ios --debug --no-codesign
+      # Simulator build — compiles all native pods (incl. whisper.cpp) with no
+      # Apple account / Development Team. Device signing + TestFlight come later.
+      - run: flutter build ios --debug --simulator
+
