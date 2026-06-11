@@ -56,7 +56,23 @@ jobs:
 
       - run: flutter pub get
       - run: flutter test
-      # Simulator build — compiles all native pods (incl. whisper.cpp) with no
-      # Apple account / Development Team. Device signing + TestFlight come later.
-      - run: flutter build ios --debug --simulator
+      # whisper_ggml pulls ffmpeg_kit, whose iOS framework is device-only (no
+      # simulator slice), so a --simulator build can't link it. Compile for a
+      # real device instead, with code signing disabled — validates the build
+      # with no Apple account. Device signing / TestFlight come later.
+      - run: flutter build ios --release --no-codesign --config-only
+      - name: Build iOS (device, unsigned)
+        working-directory: mobile/ios
+        run: |
+          pod install
+          xcodebuild build \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
 
