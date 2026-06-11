@@ -17,7 +17,7 @@ dependencies:
   provider: ^6.1.2
 
   # Phase 1 — microphone capture + file paths.
-  record: ^5.1.2          # 16 kHz mono WAV recording, cross-platform.
+  record: ^6.0.0          # 16 kHz mono WAV recording, cross-platform.
   path_provider: ^2.1.4   # app documents / temp directories.
   permission_handler: ^11.3.1
   whisper_ggml: ^1.7.0
