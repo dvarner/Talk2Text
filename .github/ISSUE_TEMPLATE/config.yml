@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Talk2Text repository
+    url: https://github.com/dvarner/Talk2Text
+    about: Project overview, source, and CI builds (download the APK from the latest green Mobile run).
