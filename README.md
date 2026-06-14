@@ -1,5 +1,15 @@
 # Talk2Text
 
+Local speech-to-text. Record, speak, get text — no cloud, no API keys.
+
+> **This repo contains two Talk2Text apps:**
+> - 🖥️ **Desktop** (Python, Windows + macOS) — at the repo root, documented below. Uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
+> - 📱 **Mobile** (Flutter, Android + iOS) — in [`mobile/`](mobile/), with on-device Whisper. See [mobile/README.md](mobile/README.md).
+
+---
+
+## 🖥️ Desktop app
+
 Local speech-to-text desktop app. Record, speak, get text. No cloud, no API keys — runs entirely on your machine using [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
 
 ## Features
@@ -72,6 +82,24 @@ Models download on first use. Change the model in Settings.
 | [pynput](https://github.com/moses-palmer/pynput) | Global hotkey listener |
 | numpy / scipy | Audio processing |
 
+---
+
+## 📱 Mobile app
+
+A cross-platform Flutter port (Android + iOS) living in [`mobile/`](mobile/). On-device Whisper transcription (with optional device/cloud speech engines), multilingual out of the box, and a share-to-Talk2Text flow for dictating into other apps. Full details in [mobile/README.md](mobile/README.md).
+
+**Install on Android:** grab the APK from the latest green [Mobile workflow run](https://github.com/dvarner/Talk2Text/actions/workflows/mobile.yml) → **Artifacts** → `Talk2Text-Android-debug`. iOS compiles in CI; running on a physical device requires an Apple Developer account for signing.
+
+## Repo structure
+
+```
+Talk2Text/
+├── talk2text.py        # 🖥️  Desktop app (Python / CustomTkinter)
+├── requirements.txt    #     Desktop dependencies
+├── mobile/             # 📱  Mobile app (Flutter, Android + iOS)
+└── .github/            #     CI workflows + issue templates + labels
+```
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — applies to both apps.

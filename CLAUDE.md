@@ -2,6 +2,11 @@
 
 Simple talk-to-text desktop app. Click record, speak, stop, get a text file.
 
+> **Monorepo:** this file documents the **desktop** app (Python, at the repo root).
+> A **mobile** app (Flutter, Android + iOS) lives in [`mobile/`](mobile/) with its
+> own README. CI for mobile is `.github/workflows/mobile.yml` (path-scoped to
+> `mobile/`); labels/issue templates are in `.github/`.
+
 ---
 
 ## Project Status
