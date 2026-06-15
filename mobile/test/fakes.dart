@@ -63,19 +63,24 @@ class FakeSettingsStore implements SettingsStore {
 }
 
 class FakeSecretStore implements SecretStore {
-  String? key;
+  FakeSecretStore([Map<String, String>? seed]) : store = {...?seed};
+
+  final Map<String, String> store;
 
   @override
-  Future<String?> getApiKey() async => key;
+  Future<String?> read(String name) async => store[name];
 
   @override
-  Future<void> setApiKey(String value) async => key = value;
+  Future<void> write(String name, String value) async => store[name] = value;
 
   @override
-  Future<void> clearApiKey() async => key = null;
+  Future<void> delete(String name) async => store.remove(name);
 
   @override
-  Future<bool> hasApiKey() async => key != null && key!.isNotEmpty;
+  Future<bool> has(String name) async {
+    final v = store[name];
+    return v != null && v.isNotEmpty;
+  }
 }
 
 /// Live (OS-recognizer style) engine recording its lifecycle calls.

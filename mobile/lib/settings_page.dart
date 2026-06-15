@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'models/app_settings.dart';
 import 'models/model_catalog.dart';
+import 'models/output_languages.dart';
 import 'state/app_controller.dart';
 
 /// Settings screen — engine selection, on-device model size, language, and the
@@ -23,8 +24,10 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _cloudUrl;
   late TextEditingController _cloudModel;
   late TextEditingController _apiKey;
+  late TextEditingController _claudeKey;
 
   bool _hasSavedKey = false;
+  bool _hasClaudeKey = false;
 
   @override
   void initState() {
@@ -38,8 +41,12 @@ class _SettingsPageState extends State<SettingsPage> {
     _cloudUrl = TextEditingController(text: s.cloudBaseUrl);
     _cloudModel = TextEditingController(text: s.cloudModel);
     _apiKey = TextEditingController();
+    _claudeKey = TextEditingController();
     c.hasApiKey().then((v) {
       if (mounted) setState(() => _hasSavedKey = v);
+    });
+    c.hasTranslatorKey().then((v) {
+      if (mounted) setState(() => _hasClaudeKey = v);
     });
   }
 
@@ -49,6 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _cloudUrl.dispose();
     _cloudModel.dispose();
     _apiKey.dispose();
+    _claudeKey.dispose();
     super.dispose();
   }
 
@@ -72,11 +80,41 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) setState(() => _hasSavedKey = false);
   }
 
+  Future<void> _saveClaudeKey() async {
+    final c = context.read<AppController>();
+    final key = _claudeKey.text.trim();
+    if (key.isEmpty) return;
+    await c.setTranslatorKey(key);
+    _claudeKey.clear();
+    if (mounted) {
+      setState(() => _hasClaudeKey = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Claude API key saved')),
+      );
+    }
+  }
+
+  Future<void> _clearClaudeKey() async {
+    final c = context.read<AppController>();
+    await c.clearTranslatorKey();
+    if (mounted) setState(() => _hasClaudeKey = false);
+  }
+
   Future<void> _apply() async {
     final c = context.read<AppController>();
     if (_engineId == 'cloud' && !_hasSavedKey) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add an API key to use the Cloud engine')),
+      );
+      return;
+    }
+    if (_outputLanguage != 'native' &&
+        _outputLanguage != 'en' &&
+        !_hasClaudeKey) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a Claude API key to translate to that language'),
+        ),
       );
       return;
     }
@@ -238,28 +276,71 @@ class _SettingsPageState extends State<SettingsPage> {
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            items: const [
-              DropdownMenuItem(
-                value: 'native',
-                child: Text('Same as spoken'),
-              ),
-              DropdownMenuItem(
-                value: 'en',
-                child: Text('English (translate)'),
-              ),
+            items: [
+              for (final l in OutputLanguages.all)
+                DropdownMenuItem(value: l.code, child: Text(l.label)),
             ],
             onChanged: (v) =>
                 setState(() => _outputLanguage = v ?? 'native'),
           ),
           const SizedBox(height: 6),
           Text(
-            _outputLanguage == 'en'
-                ? "Speak any language — Whisper translates it straight to "
-                    'English text. (On-device Whisper and Cloud only; the '
-                    'device speech engine outputs the spoken language.)'
-                : 'Transcript stays in whatever language you speak.',
+            switch (_outputLanguage) {
+              'native' => 'Transcript stays in whatever language you speak.',
+              'en' =>
+                'Speak any language — Whisper translates it straight to English, '
+                    'offline. (On-device Whisper and Cloud only.)',
+              _ =>
+                'Speak any language — Claude translates the transcript to '
+                    '${OutputLanguages.nameFor(_outputLanguage)}. Only the text '
+                    'is sent (never the audio); needs a Claude API key below.',
+            },
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
+
+          if (_outputLanguage != 'native' && _outputLanguage != 'en') ...[
+            const SizedBox(height: 16),
+            const _SectionLabel('Claude API key (translation)'),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  _hasClaudeKey ? Icons.check_circle : Icons.error_outline,
+                  size: 16,
+                  color: _hasClaudeKey ? Colors.green : Colors.orange,
+                ),
+                const SizedBox(width: 6),
+                Text(_hasClaudeKey ? 'Claude API key saved' : 'No Claude key set'),
+                const Spacer(),
+                if (_hasClaudeKey)
+                  TextButton(
+                    onPressed: _clearClaudeKey,
+                    child: const Text('Clear'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _claudeKey,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Paste Anthropic API key (sk-ant-…)',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _saveClaudeKey,
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ],
 
           const SizedBox(height: 28),
           Row(

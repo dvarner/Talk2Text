@@ -6,28 +6,20 @@ import 'package:talk2text_mobile/models/app_settings.dart';
 import 'package:talk2text_mobile/storage/secret_store.dart';
 import 'package:talk2text_mobile/stt/cloud_engine.dart';
 
-class _FakeSecrets implements SecretStore {
-  _FakeSecrets(this.key);
-  String? key;
+import 'fakes.dart';
 
-  @override
-  Future<String?> getApiKey() async => key;
-  @override
-  Future<void> setApiKey(String value) async => key = value;
-  @override
-  Future<void> clearApiKey() async => key = null;
-  @override
-  Future<bool> hasApiKey() async => key != null && key!.isNotEmpty;
-}
+FakeSecretStore _withCloudKey([String? key]) => FakeSecretStore(
+      key == null ? null : {SecretKeys.cloudApiKey: key},
+    );
 
 void main() {
   test('isReady reflects whether an API key is present', () async {
     final ready = CloudEngine(
-      secretStore: _FakeSecrets('sk-test'),
+      secretStore: _withCloudKey('sk-test'),
       client: MockClient((_) async => http.Response('', 200)),
     );
     final notReady = CloudEngine(
-      secretStore: _FakeSecrets(null),
+      secretStore: _withCloudKey(),
       client: MockClient((_) async => http.Response('', 200)),
     );
     expect(await ready.isReady(), isTrue);
@@ -38,7 +30,7 @@ void main() {
     late Uri seenUri;
     String? seenAuth;
     final engine = CloudEngine(
-      secretStore: _FakeSecrets('sk-test'),
+      secretStore: _withCloudKey('sk-test'),
       client: MockClient((request) async {
         seenUri = request.url;
         seenAuth = request.headers['Authorization'];
@@ -61,7 +53,7 @@ void main() {
   test('translate-to-English posts to /audio/translations', () async {
     late Uri seenUri;
     final engine = CloudEngine(
-      secretStore: _FakeSecrets('sk-test'),
+      secretStore: _withCloudKey('sk-test'),
       client: MockClient((request) async {
         seenUri = request.url;
         return http.Response('{"text": "hello world"}', 200);
@@ -82,7 +74,7 @@ void main() {
 
   test('transcribe surfaces non-200 errors', () async {
     final engine = CloudEngine(
-      secretStore: _FakeSecrets('sk-test'),
+      secretStore: _withCloudKey('sk-test'),
       client: MockClient((_) async => http.Response('nope', 401)),
     );
     expect(

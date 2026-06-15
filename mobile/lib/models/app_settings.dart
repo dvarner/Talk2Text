@@ -28,8 +28,15 @@ class AppSettings {
   final String outputLanguage;
 
   /// True when the transcript should be translated to English instead of kept
-  /// in the spoken language.
+  /// in the spoken language. Handled offline by the engine's translate task.
   bool get translateToEnglish => outputLanguage == 'en';
+
+  /// True when the target is a non-English language that needs the Claude
+  /// translation step (the engines can only translate *to* English).
+  bool get translateViaClaude =>
+      outputLanguage.isNotEmpty &&
+      outputLanguage != 'native' &&
+      outputLanguage != 'en';
 
 
   /// OpenAI-compatible base URL for the cloud engine (configurable so other
