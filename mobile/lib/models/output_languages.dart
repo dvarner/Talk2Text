@@ -26,7 +26,10 @@ class OutputLanguages {
     OutputLanguage('zh', 'Chinese'),
   ];
 
-  static const all = <OutputLanguage>[native, ...targets];
+  /// Free-text target (the language name is stored separately in settings).
+  static const custom = OutputLanguage('custom', 'Other…');
+
+  static const all = <OutputLanguage>[native, ...targets, custom];
 
   /// Human-readable name for a code (e.g. 'es' → 'Spanish'); the code itself if
   /// it isn't recognized.

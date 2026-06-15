@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../audio/recorder.dart';
 import '../models/app_settings.dart';
-import '../models/output_languages.dart';
 import '../storage/secret_store.dart';
 import '../storage/settings_store.dart';
 import '../storage/transcript_store.dart';
@@ -157,7 +156,8 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     return _translator.translate(
       text,
-      OutputLanguages.nameFor(_settings.outputLanguage),
+      _settings.targetLanguageName,
+      model: _settings.translationModelId,
     );
   }
 
