@@ -30,4 +30,17 @@ void main() {
     expect(engine.model, WhisperModel.small);
     expect(engine.language, 'fr');
   });
+
+  test('defaults to keeping the spoken language (no translation)', () {
+    expect(WhisperEngine().translateToEnglish, isFalse);
+  });
+
+  test('configure enables translation when output language is English', () {
+    final engine = WhisperEngine();
+    engine.configure(const AppSettings(language: 'es', outputLanguage: 'en'));
+    expect(engine.translateToEnglish, isTrue);
+
+    engine.configure(const AppSettings(outputLanguage: 'native'));
+    expect(engine.translateToEnglish, isFalse);
+  });
 }

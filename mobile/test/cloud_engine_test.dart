@@ -58,6 +58,28 @@ void main() {
     expect(seenAuth, 'Bearer sk-test');
   });
 
+  test('translate-to-English posts to /audio/translations', () async {
+    late Uri seenUri;
+    final engine = CloudEngine(
+      secretStore: _FakeSecrets('sk-test'),
+      client: MockClient((request) async {
+        seenUri = request.url;
+        return http.Response('{"text": "hello world"}', 200);
+      }),
+    )..configure(const AppSettings(
+        engineId: 'cloud',
+        cloudBaseUrl: 'https://api.example.com/v1',
+        language: 'es',
+        outputLanguage: 'en',
+      ));
+
+    final text = await engine.transcribe('test/cloud_engine_test.dart');
+
+    expect(text, 'hello world');
+    expect(seenUri.toString(),
+        'https://api.example.com/v1/audio/translations');
+  });
+
   test('transcribe surfaces non-200 errors', () async {
     final engine = CloudEngine(
       secretStore: _FakeSecrets('sk-test'),
