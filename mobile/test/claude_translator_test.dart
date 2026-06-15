@@ -35,6 +35,21 @@ void main() {
     expect(seenBody, contains('claude-haiku-4-5'));
   });
 
+  test('translate passes the chosen model through to the request', () async {
+    String? body;
+    final translator = ClaudeTranslator(
+      secretStore: FakeSecretStore({SecretKeys.anthropicApiKey: 'sk-ant-1'}),
+      client: MockClient((request) async {
+        body = request.body;
+        return http.Response('{"content":[{"type":"text","text":"x"}]}', 200);
+      }),
+    );
+
+    await translator.translate('hi', 'German', model: 'claude-opus-4-8');
+
+    expect(body, contains('claude-opus-4-8'));
+  });
+
   test('translate throws when no Claude key is set', () async {
     final translator = ClaudeTranslator(
       secretStore: FakeSecretStore(),

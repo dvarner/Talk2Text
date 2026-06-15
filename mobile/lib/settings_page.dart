@@ -20,6 +20,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _engineId;
   late String _modelSize;
   late String _outputLanguage;
+  late String _translationModel;
+  late TextEditingController _customLanguage;
   late TextEditingController _language;
   late TextEditingController _cloudUrl;
   late TextEditingController _cloudModel;
@@ -37,6 +39,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _engineId = s.engineId;
     _modelSize = s.modelSize;
     _outputLanguage = s.outputLanguage;
+    _translationModel = s.translationModel;
+    _customLanguage = TextEditingController(text: s.customOutputLanguage);
     _language = TextEditingController(text: s.language);
     _cloudUrl = TextEditingController(text: s.cloudBaseUrl);
     _cloudModel = TextEditingController(text: s.cloudModel);
@@ -52,6 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _customLanguage.dispose();
     _language.dispose();
     _cloudUrl.dispose();
     _cloudModel.dispose();
@@ -108,9 +113,15 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       return;
     }
-    if (_outputLanguage != 'native' &&
-        _outputLanguage != 'en' &&
-        !_hasClaudeKey) {
+    final isClaudeTarget =
+        _outputLanguage != 'native' && _outputLanguage != 'en';
+    if (_outputLanguage == 'custom' && _customLanguage.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a language to translate to')),
+      );
+      return;
+    }
+    if (isClaudeTarget && !_hasClaudeKey) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Add a Claude API key to translate to that language'),
@@ -123,6 +134,8 @@ class _SettingsPageState extends State<SettingsPage> {
       modelSize: _modelSize,
       language: _language.text.trim(),
       outputLanguage: _outputLanguage,
+      customOutputLanguage: _customLanguage.text.trim(),
+      translationModel: _translationModel,
       cloudBaseUrl: _cloudUrl.text.trim().isEmpty
           ? AppSettings.defaults.cloudBaseUrl
           : _cloudUrl.text.trim(),
@@ -138,6 +151,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _engineId = AppSettings.defaults.engineId;
       _modelSize = AppSettings.defaults.modelSize;
       _outputLanguage = AppSettings.defaults.outputLanguage;
+      _translationModel = AppSettings.defaults.translationModel;
+      _customLanguage.text = AppSettings.defaults.customOutputLanguage;
       _language.text = AppSettings.defaults.language;
       _cloudUrl.text = AppSettings.defaults.cloudBaseUrl;
       _cloudModel.text = AppSettings.defaults.cloudModel;
@@ -298,7 +313,43 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
           ),
 
+          if (_outputLanguage == 'custom') ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customLanguage,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Target language',
+                hintText: 'e.g. Dutch, Swahili, Tagalog',
+                isDense: true,
+              ),
+            ),
+          ],
+
           if (_outputLanguage != 'native' && _outputLanguage != 'en') ...[
+            const SizedBox(height: 16),
+            const _SectionLabel('Translation model'),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'haiku', label: Text('Fast')),
+                ButtonSegment(value: 'sonnet', label: Text('Better')),
+                ButtonSegment(value: 'opus', label: Text('Best')),
+              ],
+              selected: {_translationModel},
+              onSelectionChanged: (s) =>
+                  setState(() => _translationModel = s.first),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              switch (_translationModel) {
+                'opus' => 'Opus — highest quality for hard languages; '
+                    'slowest and priciest.',
+                'sonnet' => 'Sonnet — stronger than Haiku for tricky languages.',
+                _ => 'Haiku — fast and cheap; great for common languages.',
+              },
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
             const SizedBox(height: 16),
             const _SectionLabel('Claude API key (translation)'),
             const SizedBox(height: 8),

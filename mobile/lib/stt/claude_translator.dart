@@ -21,15 +21,19 @@ class ClaudeTranslator {
   final http.Client _client;
 
   static const _endpoint = 'https://api.anthropic.com/v1/messages';
-  // Haiku is fast and cheap — ideal for short, high-resource-language
-  // translation. (See claude-haiku-4-5.)
-  static const _model = 'claude-haiku-4-5';
+  // Haiku is fast and cheap — a good default for short, high-resource-language
+  // translation. The caller can pass a stronger model for harder languages.
+  static const defaultModel = 'claude-haiku-4-5';
 
   Future<bool> hasKey() => _secrets.has(SecretKeys.anthropicApiKey);
 
   /// Translates [text] into [targetLanguage] (a human-readable name such as
-  /// "Spanish") and returns the translation only.
-  Future<String> translate(String text, String targetLanguage) async {
+  /// "Spanish") with [model], and returns the translation only.
+  Future<String> translate(
+    String text,
+    String targetLanguage, {
+    String model = defaultModel,
+  }) async {
     if (text.trim().isEmpty) return text;
 
     final key = await _secrets.read(SecretKeys.anthropicApiKey);
@@ -45,7 +49,7 @@ class ClaudeTranslator {
         'content-type': 'application/json',
       },
       body: jsonEncode({
-        'model': _model,
+        'model': model,
         'max_tokens': 2048,
         'system': 'You are a translation engine. Translate the user message '
             'into $targetLanguage. Output only the translation — no preamble, '
