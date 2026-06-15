@@ -14,6 +14,7 @@ class WhisperEngine implements TranscriptionEngine {
   WhisperEngine({
     this.model = WhisperModel.base,
     this.language = 'en',
+    this.translateToEnglish = false,
   });
 
   /// Which GGML model to use. Only tiny/base/small are practical on phones;
@@ -22,6 +23,11 @@ class WhisperEngine implements TranscriptionEngine {
 
   /// ISO language code, or empty string for auto-detect.
   String language;
+
+  /// When true, run Whisper's `translate` task: any spoken language is
+  /// transcribed straight to English text in a single pass. Whisper only
+  /// translates *to* English, so this is a flag rather than a target language.
+  bool translateToEnglish;
 
   final WhisperController _controller = WhisperController();
 
@@ -35,6 +41,7 @@ class WhisperEngine implements TranscriptionEngine {
   void configure(AppSettings settings) {
     model = modelForSize(settings.modelSize);
     language = settings.language;
+    translateToEnglish = settings.translateToEnglish;
   }
 
   /// Maps a settings size key to the whisper_ggml multilingual model.
@@ -64,14 +71,35 @@ class WhisperEngine implements TranscriptionEngine {
 
   @override
   Future<String> transcribe(String wavPath) async {
-    final result = await _controller.transcribe(
-      model: model,
-      audioPath: wavPath,
-      lang: language.trim().isEmpty ? 'auto' : language.trim(),
-    );
-    if (result == null) {
-      throw Exception('Whisper returned no result');
+    final lang = language.trim().isEmpty ? 'auto' : language.trim();
+
+    if (!translateToEnglish) {
+      // Default path: keep the transcript in the spoken language.
+      final result = await _controller.transcribe(
+        model: model,
+        audioPath: wavPath,
+        lang: lang,
+      );
+      if (result == null) {
+        throw Exception('Whisper returned no result');
+      }
+      return result.transcription.text.trim();
     }
-    return result.transcription.text.trim();
+
+    // Translate task: Whisper outputs English from any source language in one
+    // pass. WhisperController.transcribe hardcodes translate=false, so drive the
+    // engine directly (same request params it uses, plus isTranslate).
+    final modelPath = await _controller.getPath(model);
+    final response = await Whisper(model: model).transcribe(
+      transcribeRequest: TranscribeRequest(
+        audio: wavPath,
+        language: lang,
+        isTranslate: true,
+        isNoTimestamps: true,
+        isRealtime: true,
+      ),
+      modelPath: modelPath,
+    );
+    return response.text.trim();
   }
 }

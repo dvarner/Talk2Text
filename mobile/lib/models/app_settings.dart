@@ -7,6 +7,7 @@ class AppSettings {
     this.engineId = 'whisper',
     this.modelSize = 'base',
     this.language = 'en',
+    this.outputLanguage = 'native',
     this.cloudBaseUrl = 'https://api.openai.com/v1',
     this.cloudModel = 'whisper-1',
   });
@@ -17,8 +18,19 @@ class AppSettings {
   /// On-device Whisper model size: 'tiny' | 'base' | 'small'.
   final String modelSize;
 
-  /// ISO language code (e.g. 'en'), or empty string for auto-detect.
+  /// ISO language code of the *spoken* audio (e.g. 'en'), or empty string for
+  /// auto-detect. This is the source-language hint.
   final String language;
+
+  /// Desired *output* text language. 'native' (default) keeps the transcript in
+  /// the spoken language; 'en' translates to English (Whisper/Cloud only — the
+  /// translate task targets English, so it's the one non-native option for now).
+  final String outputLanguage;
+
+  /// True when the transcript should be translated to English instead of kept
+  /// in the spoken language.
+  bool get translateToEnglish => outputLanguage == 'en';
+
 
   /// OpenAI-compatible base URL for the cloud engine (configurable so other
   /// providers can be slotted in).
@@ -33,6 +45,7 @@ class AppSettings {
     String? engineId,
     String? modelSize,
     String? language,
+    String? outputLanguage,
     String? cloudBaseUrl,
     String? cloudModel,
   }) =>
@@ -40,6 +53,7 @@ class AppSettings {
         engineId: engineId ?? this.engineId,
         modelSize: modelSize ?? this.modelSize,
         language: language ?? this.language,
+        outputLanguage: outputLanguage ?? this.outputLanguage,
         cloudBaseUrl: cloudBaseUrl ?? this.cloudBaseUrl,
         cloudModel: cloudModel ?? this.cloudModel,
       );
@@ -50,10 +64,17 @@ class AppSettings {
       other.engineId == engineId &&
       other.modelSize == modelSize &&
       other.language == language &&
+      other.outputLanguage == outputLanguage &&
       other.cloudBaseUrl == cloudBaseUrl &&
       other.cloudModel == cloudModel;
 
   @override
-  int get hashCode =>
-      Object.hash(engineId, modelSize, language, cloudBaseUrl, cloudModel);
+  int get hashCode => Object.hash(
+        engineId,
+        modelSize,
+        language,
+        outputLanguage,
+        cloudBaseUrl,
+        cloudModel,
+      );
 }

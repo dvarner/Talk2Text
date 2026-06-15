@@ -15,6 +15,7 @@ class PrefsSettingsStore implements SettingsStore {
   static const _kEngine = 'engine_id';
   static const _kModel = 'model_size';
   static const _kLanguage = 'language';
+  static const _kOutputLanguage = 'output_language';
   static const _kCloudUrl = 'cloud_base_url';
   static const _kCloudModel = 'cloud_model';
 
@@ -26,6 +27,7 @@ class PrefsSettingsStore implements SettingsStore {
       engineId: prefs.getString(_kEngine) ?? d.engineId,
       modelSize: prefs.getString(_kModel) ?? d.modelSize,
       language: prefs.getString(_kLanguage) ?? d.language,
+      outputLanguage: prefs.getString(_kOutputLanguage) ?? d.outputLanguage,
       cloudBaseUrl: prefs.getString(_kCloudUrl) ?? d.cloudBaseUrl,
       cloudModel: prefs.getString(_kCloudModel) ?? d.cloudModel,
     );
@@ -37,6 +39,7 @@ class PrefsSettingsStore implements SettingsStore {
     await prefs.setString(_kEngine, settings.engineId);
     await prefs.setString(_kModel, settings.modelSize);
     await prefs.setString(_kLanguage, settings.language);
+    await prefs.setString(_kOutputLanguage, settings.outputLanguage);
     await prefs.setString(_kCloudUrl, settings.cloudBaseUrl);
     await prefs.setString(_kCloudModel, settings.cloudModel);
   }

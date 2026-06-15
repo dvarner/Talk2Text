@@ -21,6 +21,7 @@ class CloudEngine implements TranscriptionEngine {
   String _baseUrl = AppSettings.defaults.cloudBaseUrl;
   String _model = AppSettings.defaults.cloudModel;
   String _language = AppSettings.defaults.language;
+  bool _translateToEnglish = AppSettings.defaults.translateToEnglish;
 
   @override
   String get id => 'cloud';
@@ -33,6 +34,7 @@ class CloudEngine implements TranscriptionEngine {
     _baseUrl = settings.cloudBaseUrl.trim();
     _model = settings.cloudModel.trim();
     _language = settings.language.trim();
+    _translateToEnglish = settings.translateToEnglish;
   }
 
   @override
@@ -52,13 +54,17 @@ class CloudEngine implements TranscriptionEngine {
       throw Exception('No API key set — add one in Settings.');
     }
 
-    final uri = Uri.parse('${_baseUrl.replaceAll(RegExp(r'/+$'), '')}'
-        '/audio/transcriptions');
+    // OpenAI-compatible APIs translate-to-English via a separate endpoint that
+    // always returns English text (and ignores the `language` source hint).
+    final endpoint =
+        _translateToEnglish ? '/audio/translations' : '/audio/transcriptions';
+    final uri =
+        Uri.parse('${_baseUrl.replaceAll(RegExp(r'/+$'), '')}$endpoint');
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $key'
       ..fields['model'] = _model
       ..files.add(await http.MultipartFile.fromPath('file', wavPath));
-    if (_language.isNotEmpty) {
+    if (_language.isNotEmpty && !_translateToEnglish) {
       request.fields['language'] = _language;
     }
 

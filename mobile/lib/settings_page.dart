@@ -18,6 +18,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late String _engineId;
   late String _modelSize;
+  late String _outputLanguage;
   late TextEditingController _language;
   late TextEditingController _cloudUrl;
   late TextEditingController _cloudModel;
@@ -32,6 +33,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final s = c.settings;
     _engineId = s.engineId;
     _modelSize = s.modelSize;
+    _outputLanguage = s.outputLanguage;
     _language = TextEditingController(text: s.language);
     _cloudUrl = TextEditingController(text: s.cloudBaseUrl);
     _cloudModel = TextEditingController(text: s.cloudModel);
@@ -82,6 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
       engineId: _engineId,
       modelSize: _modelSize,
       language: _language.text.trim(),
+      outputLanguage: _outputLanguage,
       cloudBaseUrl: _cloudUrl.text.trim().isEmpty
           ? AppSettings.defaults.cloudBaseUrl
           : _cloudUrl.text.trim(),
@@ -96,6 +99,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _engineId = AppSettings.defaults.engineId;
       _modelSize = AppSettings.defaults.modelSize;
+      _outputLanguage = AppSettings.defaults.outputLanguage;
       _language.text = AppSettings.defaults.language;
       _cloudUrl.text = AppSettings.defaults.cloudBaseUrl;
       _cloudModel.text = AppSettings.defaults.cloudModel;
@@ -214,7 +218,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
 
           const Divider(height: 32),
-          const _SectionLabel('Language'),
+          const _SectionLabel('Spoken language'),
           const SizedBox(height: 8),
           TextField(
             controller: _language,
@@ -224,6 +228,39 @@ class _SettingsPageState extends State<SettingsPage> {
               isDense: true,
             ),
           ),
+
+          const Divider(height: 32),
+          const _SectionLabel('Output text'),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: _outputLanguage,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'native',
+                child: Text('Same as spoken'),
+              ),
+              DropdownMenuItem(
+                value: 'en',
+                child: Text('English (translate)'),
+              ),
+            ],
+            onChanged: (v) =>
+                setState(() => _outputLanguage = v ?? 'native'),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _outputLanguage == 'en'
+                ? "Speak any language — Whisper translates it straight to "
+                    'English text. (On-device Whisper and Cloud only; the '
+                    'device speech engine outputs the spoken language.)'
+                : 'Transcript stays in whatever language you speak.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+
           const SizedBox(height: 28),
           Row(
             children: [
