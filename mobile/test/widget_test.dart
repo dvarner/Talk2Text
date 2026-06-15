@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 import 'package:talk2text_mobile/home_page.dart';
 import 'package:talk2text_mobile/models/app_settings.dart';
 import 'package:talk2text_mobile/state/app_controller.dart';
+import 'package:talk2text_mobile/storage/secret_store.dart';
 import 'package:talk2text_mobile/storage/settings_store.dart';
+import 'package:talk2text_mobile/stt/claude_translator.dart';
 import 'package:talk2text_mobile/stt/transcription_engine.dart';
 
 import 'fakes.dart';
@@ -69,9 +73,38 @@ void main() {
     expect(await c.hasApiKey(), isFalse);
     await c.setApiKey('sk-test');
     expect(await c.hasApiKey(), isTrue);
-    expect(secrets.key, 'sk-test');
+    expect(secrets.store[SecretKeys.cloudApiKey], 'sk-test');
     await c.clearApiKey();
     expect(await c.hasApiKey(), isFalse);
+  });
+
+  test('non-English output language runs the Claude translation step',
+      () async {
+    final secrets = FakeSecretStore({SecretKeys.anthropicApiKey: 'sk-ant'});
+    final translator = ClaudeTranslator(
+      secretStore: secrets,
+      client: MockClient((_) async => http.Response(
+            '{"content":[{"type":"text","text":"Hola"}]}',
+            200,
+          )),
+    );
+    final store = FakeStore();
+    final c = AppController(
+      recorder: FakeCapture(),
+      engines: {'stub': StubEngine()},
+      store: store,
+      settingsStore: FakeSettingsStore()
+        ..saved = const AppSettings(outputLanguage: 'es'),
+      secretStore: secrets,
+      translator: translator,
+    );
+    await c.init();
+
+    await c.toggleRecord(); // start
+    await c.toggleRecord(); // stop → transcribe → translate
+
+    expect(c.transcript, 'Hola');
+    expect(store.saved.single, 'Hola');
   });
 
   test('live engine path uses startListening/stopListening, not the recorder',

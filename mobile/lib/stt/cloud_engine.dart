@@ -38,18 +38,18 @@ class CloudEngine implements TranscriptionEngine {
   }
 
   @override
-  Future<bool> isReady() => _secrets.hasApiKey();
+  Future<bool> isReady() => _secrets.has(SecretKeys.cloudApiKey);
 
   @override
   Future<void> prepare() async {
-    if (!await _secrets.hasApiKey()) {
+    if (!await _secrets.has(SecretKeys.cloudApiKey)) {
       throw Exception('No API key set — add one in Settings.');
     }
   }
 
   @override
   Future<String> transcribe(String wavPath) async {
-    final key = await _secrets.getApiKey();
+    final key = await _secrets.read(SecretKeys.cloudApiKey);
     if (key == null || key.isEmpty) {
       throw Exception('No API key set — add one in Settings.');
     }

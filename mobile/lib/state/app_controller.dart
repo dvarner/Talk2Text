@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 
 import '../audio/recorder.dart';
 import '../models/app_settings.dart';
+import '../models/output_languages.dart';
 import '../storage/secret_store.dart';
 import '../storage/settings_store.dart';
 import '../storage/transcript_store.dart';
+import '../stt/claude_translator.dart';
 import '../stt/cloud_engine.dart';
 import '../stt/native_speech_engine.dart';
 import '../stt/transcription_engine.dart';
@@ -23,6 +25,7 @@ class AppController extends ChangeNotifier {
     TranscriptStore? store,
     SettingsStore? settingsStore,
     SecretStore? secretStore,
+    ClaudeTranslator? translator,
     Map<String, TranscriptionEngine>? engines,
   }) {
     final secrets = secretStore ?? SecureSecretStore();
@@ -31,6 +34,7 @@ class AppController extends ChangeNotifier {
       store ?? FileTranscriptStore(),
       settingsStore ?? PrefsSettingsStore(),
       secrets,
+      translator ?? ClaudeTranslator(secretStore: secrets),
       engines ??
           {
             'whisper': WhisperEngine(),
@@ -45,6 +49,7 @@ class AppController extends ChangeNotifier {
     this._store,
     this._settingsStore,
     this._secretStore,
+    this._translator,
     this._engines,
   );
 
@@ -52,6 +57,7 @@ class AppController extends ChangeNotifier {
   final TranscriptStore _store;
   final SettingsStore _settingsStore;
   final SecretStore _secretStore;
+  final ClaudeTranslator _translator;
 
   /// Available engines keyed by id; the active one is chosen by
   /// [AppSettings.engineId].
@@ -117,17 +123,42 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  // ── Cloud API key (secure storage) ──────────────────────────────────────
-  Future<bool> hasApiKey() => _secretStore.hasApiKey();
+  // ── Cloud transcription API key (secure storage) ────────────────────────
+  Future<bool> hasApiKey() => _secretStore.has(SecretKeys.cloudApiKey);
 
   Future<void> setApiKey(String key) async {
-    await _secretStore.setApiKey(key.trim());
+    await _secretStore.write(SecretKeys.cloudApiKey, key.trim());
     notifyListeners();
   }
 
   Future<void> clearApiKey() async {
-    await _secretStore.clearApiKey();
+    await _secretStore.delete(SecretKeys.cloudApiKey);
     notifyListeners();
+  }
+
+  // ── Claude translation API key (secure storage) ─────────────────────────
+  Future<bool> hasTranslatorKey() => _secretStore.has(SecretKeys.anthropicApiKey);
+
+  Future<void> setTranslatorKey(String key) async {
+    await _secretStore.write(SecretKeys.anthropicApiKey, key.trim());
+    notifyListeners();
+  }
+
+  Future<void> clearTranslatorKey() async {
+    await _secretStore.delete(SecretKeys.anthropicApiKey);
+    notifyListeners();
+  }
+
+  /// Applies the optional Claude translation step to a finished transcript.
+  /// No-op unless the output language is a non-English target.
+  Future<String> _applyOutputLanguage(String text) async {
+    if (!_settings.translateViaClaude) return text;
+    _message = 'Translating…';
+    notifyListeners();
+    return _translator.translate(
+      text,
+      OutputLanguages.nameFor(_settings.outputLanguage),
+    );
   }
 
   String _idleMessage() {
@@ -190,6 +221,7 @@ class AppController extends ChangeNotifier {
         _message = 'Finishing…';
         notifyListeners();
         _transcript = await engine.stopListening();
+        _transcript = await _applyOutputLanguage(_transcript);
       } else {
         final path = await _recorder.stop();
         if (path == null) {
@@ -207,6 +239,7 @@ class AppController extends ChangeNotifier {
         _message = 'Transcribing…';
         notifyListeners();
         _transcript = await engine.transcribe(path);
+        _transcript = await _applyOutputLanguage(_transcript);
       }
 
       _savedPath = await _store.save(_transcript);
