@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # GitHub Actions used by the CI/release workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["type: chore", "area: ci"]
+
+  # Flutter / Dart packages for the mobile app.
+  - package-ecosystem: pub
+    directory: /mobile
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["type: chore", "area: android"]
+
+  # Python dependencies for the desktop app.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ["type: chore"]

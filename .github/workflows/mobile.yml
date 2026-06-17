@@ -11,6 +11,11 @@ on:
       - ".github/workflows/mobile.yml"
   workflow_dispatch:
 
+# Least privilege: this workflow only builds + tests, so a read-only token is
+# all it needs (fork PRs already run with no secrets).
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: mobile

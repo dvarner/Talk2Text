@@ -13,7 +13,7 @@ Simple talk-to-text desktop app. Click record, speak, stop, get a text file.
 
 **Phase:** MVP
 **Stack:** Python, CustomTkinter (GUI), faster-whisper (STT), sounddevice (mic)
-**Reference:** Audio + Whisper code ported from `D:\Claude\MeetKale\src\voice\`
+**Reference:** Audio + Whisper capture adapted from an earlier local prototype.
 
 ---
 
@@ -24,7 +24,7 @@ Simple talk-to-text desktop app. Click record, speak, stop, get a text file.
 3. Live recording timer display
 4. Transcribes on stop (faster-whisper, base model)
 5. Shows transcript in text area
-6. Auto-saves to `D:\Claude\Talk2Text\transcripts\YYYY-MM-DD_HH-MM-SS.txt`
+6. Auto-saves to `transcripts/YYYY-MM-DD_HH-MM-SS.txt`
 7. "Save As..." button to pick custom path
 
 **Out of scope for MVP:** Real-time streaming, copy/paste toolbar, API output, settings panel.
@@ -34,11 +34,11 @@ Simple talk-to-text desktop app. Click record, speak, stop, get a text file.
 ## File Structure
 
 ```
-D:\Claude\Talk2Text\
+Talk2Text/
 ├── CLAUDE.md
 ├── requirements.txt
 └── talk2text.py        ← entire app, single file
-    transcripts\        ← auto-created, output goes here
+    transcripts/        ← auto-created, output goes here
 ```
 
 ---

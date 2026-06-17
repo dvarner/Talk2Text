@@ -8,6 +8,22 @@ Local speech-to-text. Record, speak, get text — no cloud, no API keys.
 
 ---
 
+## 🔒 Privacy & your data
+
+Talk2Text is local-first. What leaves your device depends on the mode you choose:
+
+| Mode | What leaves your device |
+|------|--------------------------|
+| **On-device Whisper** (default) | Nothing — audio and transcripts stay local. |
+| **Cloud transcription** (optional) | Your **audio** is sent to the OpenAI-compatible endpoint you configure. |
+| **Translation** (optional) | Your **transcript text** (never the audio) is sent to the Anthropic API. |
+
+API keys are stored in your OS secure store (Keychain / Keystore) and are never
+written to settings files, logs, or transcripts. See [SECURITY.md](SECURITY.md)
+to report a vulnerability.
+
+---
+
 ## 🖥️ Desktop app
 
 Local speech-to-text desktop app. Record, speak, get text. No cloud, no API keys — runs entirely on your machine using [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
@@ -30,6 +46,17 @@ Pre-built binaries available on the [Releases](https://github.com/dvarner/Talk2T
 
 - **Windows:** Download `Talk2Text.exe`
 - **macOS:** Download `Talk2Text`
+
+**Verify your download.** Each release also includes `SHA256SUMS.txt`. Compare:
+```bash
+# macOS/Linux
+shasum -a 256 Talk2Text            # compare against SHA256SUMS.txt
+# Windows (PowerShell)
+Get-FileHash .\Talk2Text.exe -Algorithm SHA256
+```
+The binaries are **not yet code-signed**, so Windows SmartScreen / macOS
+Gatekeeper will warn on first launch — verifying the checksum is how you confirm
+the file is the one published here.
 
 ## Run from Source
 
